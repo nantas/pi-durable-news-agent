@@ -106,7 +106,7 @@ export function observability(sink: ObservabilitySink, name = "observability"): 
               isError: result.isError ?? false,
               diagnostics: result.diagnostics,
               result: preview(
-                result.content?.map((c) => (c.type === "text" ? c.text : `[${c.type}]`)).join(""),
+                result.output?.map((c) => (c.type === "text" ? c.text : `[${c.type}]`)).join(""),
               ),
             },
           });

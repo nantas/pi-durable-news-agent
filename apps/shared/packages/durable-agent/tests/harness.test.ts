@@ -3,21 +3,34 @@ import { spawnSync } from "node:child_process";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { test } from "node:test";
-import { CATALOG, createModelCatalog, DEFAULT_MODEL, say } from "../src/index.ts";
+import { createModelCatalog, installScriptedFaux, say } from "../src/index.ts";
 import { ask, fauxHarness, tempDir } from "./helpers.ts";
 
-test("the catalog defaults to Haiku 5.5 and every id resolves in pi-ai 1.1.0 OpenRouter", () => {
-  assert.equal(DEFAULT_MODEL, "anthropic/claude-haiku-5.5");
-  assert.equal(CATALOG.length, 30);
-  const catalog = createModelCatalog({ provider: "openrouter" });
-  assert.deepEqual(catalog.defaultModel, {
-    provider: "openrouter",
-    modelId: "anthropic/claude-haiku-5.5",
+test("production catalogs require explicit Pi role models", () => {
+  assert.throws(() => createModelCatalog({ provider: "pi" }), /explicit role models/);
+  const models = createModelCatalog({
+    provider: "faux",
+    installFaux: (models) => installScriptedFaux(models, []),
+  }).models;
+  const catalog = createModelCatalog({
+    provider: "pi",
+    runtime: models,
+    defaultModel: "faux/faux-haiku",
+    modelIds: ["faux/faux-haiku"],
   });
-  const list = catalog.list();
-  assert.equal(list.length, 30);
-  assert.equal(list[0].contextWindow, 1_000_000);
-  assert.throws(() => catalog.ref("made/up-model"), /Unknown model/);
+  assert.deepEqual(catalog.defaultModel, { provider: "faux", modelId: "faux-haiku" });
+  assert.equal(catalog.list().length, 1);
+  assert.throws(() => catalog.ref("another/model"), /Unknown model/);
+  assert.throws(
+    () =>
+      createModelCatalog({
+        provider: "pi",
+        runtime: models,
+        defaultModel: "missing/model",
+        modelIds: ["missing/model"],
+      }),
+    /not registered/,
+  );
 });
 
 test("the harness stores in WAL, answers on the faux model, and offers no bash or file tools", async () => {

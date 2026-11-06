@@ -428,3 +428,56 @@ test("hyper_fetch reads a long saved scrape chunk by chunk to the end", async ()
   assert.equal(past.isError, true);
   assert.match(past.text, /has 3 chunks/);
 });
+
+test("calibration tool saves explicit corrections and publishes the updated card", async () => {
+  const { item } = app.store.news.upsertItem({
+    url: "https://example.com/explicit-calibration",
+    title: "Design method",
+  });
+  const { card } = app.store.news.addCard({
+    kind: "news",
+    component: "headline",
+    props: {},
+    itemId: item.id,
+    toolCallId: "explicit-calibration",
+  });
+  const assessment = app.store.news.saveAssessment({
+    itemId: item.id,
+    command: "incremental",
+    version: 1,
+    materialHash: "m",
+    coverageSnapshot: "s",
+    status: "completed",
+    scores: { design: 80, tools: 10, reference: 40 },
+    confidence: 0.8,
+    readingDepth: "page",
+    claims: [],
+    evidence: [],
+    queries: [],
+  });
+  const frames: Frame[] = [];
+  const stop = app.bus.subscribe((frame) => frames.push(frame));
+  try {
+    const saved = await callTool(app.main, "calibrate_score", {
+      card_id: card.id,
+      assessment_id: assessment.id,
+      note: "设计分应为60，因为已掌握",
+      reason: "已掌握",
+      scores: { design: 60 },
+    });
+    assert.equal(saved.isError, false, saved.text);
+    assert.equal(app.store.news.card(card.id)?.assessment?.correction?.scores?.design, 60);
+    assert.ok(
+      frames.some((frame) => frame.type === "feed.card_updated" && frame.card.id === card.id),
+    );
+    const vague = await callTool(app.main, "calibrate_score", {
+      card_id: card.id,
+      assessment_id: assessment.id,
+      note: "不准",
+      reason: "不准",
+    });
+    assert.equal(vague.isError, true);
+  } finally {
+    stop();
+  }
+});

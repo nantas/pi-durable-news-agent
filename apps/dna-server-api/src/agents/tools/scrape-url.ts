@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import * as schema from "@earendil-works/pi-schema";
 import { defineAppTool, toolError, toolText } from "@dna/durable-agent";
 import type { Deps } from "../../deps.ts";
 import { activeSweepId, clip, ref } from "./shared.ts";
@@ -10,10 +10,10 @@ export function scrapeUrl(deps: Deps) {
       "Text: the page title and how it was fetched, then its text as markdown clipped to max_chars.",
     description:
       "Read a page in full by fetching its URL directly (cache first). Give item_id to read an item's page, or a url.",
-    parameters: Type.Object({
-      item_id: Type.Optional(Type.Integer()),
-      url: Type.Optional(Type.String()),
-      max_chars: Type.Optional(Type.Integer({ minimum: 500, maximum: 8000 })),
+    parameters: schema.obj({
+      item_id: schema.opt(schema.int()),
+      url: schema.opt(schema.str()),
+      max_chars: schema.opt(schema.int({ minimum: 500, maximum: 8000 })),
     }),
     replay: "safe",
     outputLimits: { maxBytes: 20_000 },

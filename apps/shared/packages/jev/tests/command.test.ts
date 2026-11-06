@@ -14,6 +14,9 @@ import {
 const DIR = join(import.meta.dirname, "../../../../dna-server-api/prompt_engineering/jev");
 
 const SAMPLE = {
+  material: "A reusable design method",
+  coverage: { evidence: [], queries: [] },
+  calibrationExamples: [],
   title: "pi-durable 1.1.0 adds task timings",
   source: "github.com",
   excerpt: "Task records now carry startedAt and endedAt; tool results carry durationMs.",
@@ -36,11 +39,13 @@ const SAMPLE = {
   claims: ["Task records carry startedAt", "It ships a GUI"],
 };
 
-test("all six commands load, render and validate", () => {
+test("all commands load, render and validate", () => {
   assert.deepEqual(listCommands(DIR), [
     "claim-support",
+    "coverage",
     "hfs",
     "importance",
+    "incremental",
     "relevance",
     "same-story",
     "worth-attention",

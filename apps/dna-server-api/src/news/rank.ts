@@ -7,7 +7,10 @@ import type { Store } from "../db/store.ts";
 import { watching } from "./sources/discover.ts";
 
 /** The source an item came from, or the source that watches its site. */
-export function sourceFor(store: Store, item: Pick<Item, "sourceId" | "url">): Source | undefined {
+export function sourceFor(
+  store: Pick<Store, "sources">,
+  item: Pick<Item, "sourceId" | "url">,
+): Source | undefined {
   const sources = store.sources.list();
   return (
     (item.sourceId && sources.find((s) => s.id === item.sourceId)) || watching(sources, item.url)
@@ -16,7 +19,7 @@ export function sourceFor(store: Store, item: Pick<Item, "sourceId" | "url">): S
 
 /** The reader's weights for an item: its topic's and its source's, 1 when there is none. */
 export function weightsOf(
-  store: Store,
+  store: Pick<Store, "sources" | "taste">,
   item: Pick<Item, "sourceId" | "url" | "matchedTopic">,
 ): { topic: number; source: number } {
   const topic = item.matchedTopic

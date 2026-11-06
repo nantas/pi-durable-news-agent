@@ -1,5 +1,5 @@
 // The quick model: one-shot jobs (reading a publish date out of a page today) on a small, cheap model the reader picks
-// next to the agent's model. Saved in settings; Haiku 5.5 with thinking off by default.
+// next to the agent's model. Production roles are explicitly configured.
 import type { ModelCatalog } from "@dna/durable-agent";
 import type { Logger } from "@dna/sdk/node";
 import type { Store } from "../db/store.ts";
@@ -18,15 +18,25 @@ export const DEFAULT_QUICK: QuickSetting = {
 };
 
 export class Quick {
-  constructor(private readonly deps: { catalog: ModelCatalog; store: Store; log: Logger }) {}
+  constructor(
+    private readonly deps: {
+      catalog: ModelCatalog;
+      store: Store;
+      log: Logger;
+      model: string;
+      key?: string;
+      maxTokens?: number;
+    },
+  ) {}
 
   setting(): QuickSetting {
-    return { ...DEFAULT_QUICK, ...this.deps.store.settings.get("quick", DEFAULT_QUICK) };
+    const fallback = { ...DEFAULT_QUICK, model: this.deps.model };
+    return { ...fallback, ...this.deps.store.settings.get(this.deps.key ?? "quick", fallback) };
   }
 
   set(patch: Partial<QuickSetting>): QuickSetting {
     const next = { ...this.setting(), ...patch };
-    this.deps.store.settings.set("quick", next);
+    this.deps.store.settings.set(this.deps.key ?? "quick", next);
     this.deps.log.info("quick.configured", { ...next });
     return next;
   }
@@ -36,7 +46,7 @@ export class Quick {
     label: string,
     system: string,
     user: string,
-  ): Promise<{ text: string; costUsd: number }> {
+  ): Promise<{ text: string; costUsd: number | null }> {
     const { model: id, thinkingLevel } = this.setting();
     const { catalog, log } = this.deps;
     const ref = catalog.ref(id);
@@ -47,7 +57,7 @@ export class Quick {
       model,
       { systemPrompt: system, messages: [{ role: "user", content: user, timestamp: started }] },
       {
-        maxTokens: 400,
+        maxTokens: this.deps.maxTokens ?? 400,
         signal: AbortSignal.timeout(30_000),
         ...(thinkingLevel === "off" ? {} : { reasoning: thinkingLevel }),
       },
@@ -58,7 +68,7 @@ export class Quick {
       .map((c) => (c.type === "text" ? c.text : ""))
       .join("")
       .trim();
-    const costUsd = reply.usage?.cost?.total ?? 0;
+    const costUsd = catalog.info(id)?.billingUnknown ? null : (reply.usage?.cost?.total ?? null);
     log.info("quick.call", {
       label,
       model: id,

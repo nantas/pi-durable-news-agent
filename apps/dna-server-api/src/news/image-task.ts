@@ -15,21 +15,12 @@ export function createImageTask(deps: Deps) {
     initial: () => ({ phase: "generate" }),
     phases: {
       generate: async (task, runtime, ctx) => {
-        let ok = deps.store.news.image(task.input.imageId)?.status === "ready";
-        if (!ok) {
-          try {
-            ok = (await deps.images.generate(task.input.imageId, task.input.prompt)).ok;
-          } catch (error) {
-            deps.store.news.updateImage(task.input.imageId, {
-              status: "failed",
-              error: String(error).slice(0, 500),
-            });
-            deps.log.warn("image.task_failed", {
-              imageId: task.input.imageId,
-              error: String(error),
-            });
-          }
-        }
+        // Retain the task kind so pre-existing queued jobs finish without generating images.
+        const ok = false;
+        deps.store.news.updateImage(task.input.imageId, {
+          status: "failed",
+          error: "AI image generation is disabled",
+        });
         for (const card of deps.store.news.cardsWithImage(task.input.imageId))
           deps.bus.publish({ type: "feed.card_updated", card });
         await runtime.commit(

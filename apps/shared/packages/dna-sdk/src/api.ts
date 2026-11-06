@@ -54,6 +54,68 @@ export interface Timeline extends TimelineSummary {
   cards: Card[];
 }
 
+export interface Bookmark {
+  id: number;
+  itemId: number;
+  cardId: number;
+  title: string;
+  url: string;
+  sourceName?: string;
+  note: string;
+  createdAt: string;
+}
+
+export interface ScoreCorrection {
+  scores?: Partial<{ design: number; tools: number; reference: number }>;
+  applies?: Partial<{ design: boolean; tools: boolean; reference: boolean }>;
+  domains?: string[];
+}
+
+export interface Assessment {
+  id: number;
+  itemId: number;
+  command: string;
+  version: number;
+  materialHash: string;
+  coverageSnapshot: string;
+  status: "pending" | "completed" | "unknown";
+  scores?: { design: number; tools: number; reference: number };
+  confidence?: number;
+  reason?: string;
+  readingDepth: string;
+  evidencePrepared?: boolean;
+  claims: { id: string; text: string }[];
+  evidence: {
+    id: string;
+    path: string;
+    layer: string;
+    excerpt: string;
+    contentHash: string;
+    ranges?: { start: number; end: number }[];
+    claimIds?: string[];
+  }[];
+  queries: {
+    claimId: string;
+    queries: string[];
+    scopes: string[];
+    mode?: string;
+    effectiveQueries?: string[];
+    error?: string;
+  }[];
+  jevCallId?: number;
+  correction?: ScoreCorrection;
+  exactMatches?: { path: string; layer: string }[];
+  judgments?: Record<
+    string,
+    {
+      choice?: string;
+      probability?: number;
+      confidence?: number;
+      probabilities?: Record<string, number>;
+    }
+  >;
+}
+
 export interface Card {
   id: number;
   /** Always "news" in the feed; "story" only on old story cards from before timelines. */
@@ -79,9 +141,11 @@ export interface Card {
   sourceName?: string;
   discussionUrl?: string;
   publishedAt?: string;
+  discoveredAt?: string;
   /** The topic keyword the item matched when it was gathered. */
   topic?: string;
   timeline?: TimelineRef;
+  assessment?: Assessment;
   hfs?: HfsScores;
   attention?: number;
   image?: CardImage;
@@ -118,9 +182,23 @@ export interface Keyword {
   lastSearchedAt?: string;
 }
 
-export type SourceKind = "rss" | "atom" | "hn_front" | "hn_search" | "github_releases" | "web_page";
+export type SourceKind =
+  | "rss"
+  | "atom"
+  | "hn_front"
+  | "hn_search"
+  | "github_releases"
+  | "web_page"
+  | "youtube_channel"
+  | "github_topic";
 /** config: the defaults file. user: added in a client. agent: saved by the agent. upvote: saved from a reader upvote. */
 export type SourceOrigin = "config" | "user" | "agent" | "upvote";
+
+export interface SourceOptions {
+  paths?: string[];
+  excludeTerms?: string[];
+  pages?: string[];
+}
 
 export interface Source {
   id: number;
@@ -131,6 +209,7 @@ export interface Source {
   weight: number;
   intervalMin: number;
   enabled: boolean;
+  options?: SourceOptions;
   failCount: number;
   lastStatus?: string;
   lastError?: string;
@@ -257,6 +336,7 @@ export interface ToolInfo {
 }
 
 export interface ModelInfo {
+  billingUnknown?: boolean;
   id: string;
   name: string;
   tier: string;
@@ -314,6 +394,7 @@ export interface AgentState {
   quick: { model: string; thinkingLevel: string };
   /** The deep-research subagents deep_dive_research starts: their model, thinking level and how many. */
   deepResearch: { model: string; thinkingLevel: string; count: number };
+  roles?: { research: string; coverage: string; summary: string };
   busy: boolean;
   contextTokens: number;
   contextWindow: number;
@@ -327,7 +408,13 @@ export interface AgentState {
     cacheWrite: number;
   };
   /** Everything this device has spent, all time: model, jev and generated images. */
-  spend: { modelUsd: number; jevUsd: number; imageUsd: number; totalUsd: number };
+  spend: {
+    modelUsd: number;
+    jevUsd: number;
+    imageUsd: number;
+    totalUsd: number;
+    modelCostUnknown?: boolean;
+  };
   lastActivityAt?: number;
   nextSweepAt?: string;
   /** How often scheduled sweeps run. */
@@ -494,6 +581,7 @@ export type Frame =
     }
   | { type: "agent.snapshot"; conversationId: number; snapshot: WireSnapshotEvent }
   | { type: "agent.batch"; conversationId: number; events: WireAgentEvent[] }
+  | { type: "bookmarks.changed" }
   | { type: "feed.card"; card: Card }
   | { type: "feed.card_updated"; card: Card }
   | { type: "sweep"; sweep: Sweep }
@@ -514,6 +602,7 @@ export type WhenBusy = "followUp" | "steer";
 
 export interface SendMessageBody {
   content: string;
+  cardId?: number;
   /** Retries with the same requestId never submit twice. */
   requestId: string;
   mode?: WhenBusy;
@@ -586,6 +675,9 @@ export interface FeedbackResult {
 }
 
 export interface AgentConfigBody {
+  researchModel?: string;
+  coverageModel?: string;
+  summaryModel?: string;
   model?: string;
   thinkingLevel?: "off" | "minimal" | "low" | "medium" | "high";
   /** The quick model for one-shot jobs (publish dates). */

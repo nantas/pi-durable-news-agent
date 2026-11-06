@@ -39,7 +39,7 @@ if [ "$TARGET" = "faux" ]; then
   PORT=$(node -e 'const s=require("net").createServer().listen(0,()=>{console.log(s.address().port);s.close()})')
   CLIENT="dna_$(openssl rand -hex 24)"
   CRON="dna_$(openssl rand -hex 24)"
-  (cd ../dna-server-api && exec env DNA_ENV_FILE=none DNA_PROVIDER=faux DNA_SEARCH_MODE=fixture DNA_DATA_DIR="$TMP/data" DNA_LOG_DIR="$TMP/logs" \
+  (cd ../dna-server-api && exec env DNA_ENV_FILE=none DNA_PROVIDER=faux JEV_BACKEND=fixture DNA_WIKI_DIR= DNA_MODEL=faux-haiku DNA_RESEARCH_MODEL=faux-haiku DNA_QUICK_MODEL=anthropic/claude-haiku-5.5 DNA_COVERAGE_MODEL=faux-haiku DNA_DEEP_RESEARCH_MODEL=anthropic/claude-haiku-5.5 DNA_SUMMARY_MODEL=faux-haiku DNA_SEARCH_MODE=fixture DNA_DATA_DIR="$TMP/data" DNA_LOG_DIR="$TMP/logs" \
     DNA_DEVICE_NAME=faux-smoke DNA_CLIENT_TOKEN="$CLIENT" DNA_CRON_TOKEN="$CRON" NODE_NO_WARNINGS=1 node --import tsx src/main.ts --port "$PORT" >"$TMP/api.log" 2>&1) &
   API_PID=$!
   for _ in $(seq 1 150); do curl -sf "http://127.0.0.1:$PORT/healthz" >/dev/null && break; sleep 0.1; done
@@ -58,7 +58,7 @@ pass "attached to $TARGET"
 
 send "/feed"
 wait_for "\[feed\]" 10
-wait_for "(Signal|Facts|Hype) [0-9]+" 10
+wait_for "(游戏设计方法|创作与生产工具|内容参考与储备|Signal|Facts|Hype) [0-9]+" 10
 pass "/feed shows ranked cards"
 [ -n "${SHOTS:-}" ] && screen > "$SHOTS/feed.txt"
 CARD=$(screen | grep -Eo '#[0-9]+ (brief|signal_alert|thread_pulse|headline|fact_check|hype_watch|release|quote)' | head -1 | grep -Eo '[0-9]+')
@@ -97,7 +97,7 @@ if [ "$TARGET" = "faux" ]; then
   [ -n "${SHOTS:-}" ] && screen > "$SHOTS/chat.txt"
 else
   send "/card $CARD"
-  wait_for "card $CARD" 10
+  wait_for "esc returns to the chat" 10
   pass "/card $CARD (read only on a live device)"
 
   wait_for "bg [0-9]+k  force [0-9]+k" 10

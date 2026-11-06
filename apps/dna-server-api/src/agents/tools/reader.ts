@@ -1,7 +1,7 @@
 // Tools that act for the reader the way the browser's controls do: vote and label a card (card_feedback), change
 // keywords (edit_keyword), rank a source (edit_source), open a feed tab (open_tab) and point at a card (highlight_item). Votes and rank moves add to
 // weights, so their effect is kept once per call: a replay after a crash returns the first result.
-import { Type } from "@earendil-works/pi-ai";
+import * as schema from "@earendil-works/pi-schema";
 import { defineAppTool, once, toolError, toolText } from "@dna/durable-agent";
 import { HFS_CATEGORIES, TAB_BYS, type Card, type Keyword, type Source } from "@dna/sdk";
 import type { Deps } from "../../deps.ts";
@@ -17,7 +17,7 @@ const SOURCE_ACTIONS = ["rank_up", "rank_down"] as const;
 export const RANK_STEP = 0.1;
 
 const literals = <T extends string>(values: readonly T[]) =>
-  Type.Union(values.map((v) => Type.Literal(v)));
+  schema.union(values.map((v) => schema.lit(v)));
 const cardLine = (c: Card) =>
   `card ${c.id} "${c.title}"${c.publishedAt ? ` (published ${c.publishedAt.slice(0, 10)})` : ""}`;
 const keywordLine = (k: Keyword) =>
@@ -27,8 +27,8 @@ export const sourceLine = (s: Source) =>
   `#${s.id} ${s.kind} "${s.name}" weight ${s.weight.toFixed(2)}${s.enabled ? "" : " (off)"}`;
 
 const CARD_PARAMS = {
-  card_id: Type.Optional(Type.Integer()),
-  item_id: Type.Optional(Type.Integer()),
+  card_id: schema.opt(schema.int()),
+  item_id: schema.opt(schema.int()),
 };
 
 function findCard(deps: Deps, args: { card_id?: number; item_id?: number }) {
@@ -59,10 +59,10 @@ export function cardFeedback(deps: Deps) {
       "Text: the card and what was recorded, then each keyword weight that moved (term, from, to).",
     description:
       "Vote on a card or label it for the reader, exactly like the card's buttons. vote up is show me more and vote down is show me less: both move the card's topic weight. labels sets its Hype, Facts and Signal labels (an empty list clears them) and moves those keywords. Use it only when the reader asks. Give card_id, or item_id for the item's card.",
-    parameters: Type.Object({
+    parameters: schema.obj({
       ...CARD_PARAMS,
-      vote: Type.Optional(literals(VOTES)),
-      labels: Type.Optional(Type.Array(literals(HFS_CATEGORIES), { maxItems: 3 })),
+      vote: schema.opt(literals(VOTES)),
+      labels: schema.opt(schema.arr(literals(HFS_CATEGORIES), { maxItems: 3 })),
     }),
     enums: { vote: VOTES },
     example: { card_id: 22, vote: "down" },
@@ -114,11 +114,11 @@ export function editKeyword(deps: Deps) {
       "Text: the keyword after the change (id, section, term, weight, off when disabled), or the one removed.",
     description:
       "Change the reader's keywords like the Taste settings do. add puts a term in a section (topic steers what sweeps search; hype, facts and signal steer jev). remove deletes one, enable and disable turn one on or off, rank_up (boost, raise) and rank_down (lower) move its weight by 0.10 (weights stay between 0.10 and 2.00). Name the keyword by keyword_id from read_taste, or by term (with kind when two sections share it). Use it only when the reader asks.",
-    parameters: Type.Object({
+    parameters: schema.obj({
       action: literals(ACTIONS),
-      term: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
-      kind: Type.Optional(literals(KINDS)),
-      keyword_id: Type.Optional(Type.Integer()),
+      term: schema.opt(schema.str({ minLength: 1, maxLength: 80 })),
+      kind: schema.opt(literals(KINDS)),
+      keyword_id: schema.opt(schema.int()),
     }),
     enums: { action: ACTIONS, kind: KINDS },
     example: { action: "rank_down", term: "agent sdk" },
@@ -194,10 +194,10 @@ export function editSource(deps: Deps) {
     returns: "Text: the source after the change (id, kind, name, weight, off when disabled).",
     description:
       "Change a source's weight like the Sources settings do. rank_up (boost, raise) and rank_down (lower) move its weight by 0.10 (weights stay between 0.10 and 2.00). The weight multiplies the rank of every item from that source. Name the source by source_id from read_taste, or by its name. Use it only when the reader asks.",
-    parameters: Type.Object({
+    parameters: schema.obj({
       action: literals(SOURCE_ACTIONS),
-      source_id: Type.Optional(Type.Integer()),
-      name: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+      source_id: schema.opt(schema.int()),
+      name: schema.opt(schema.str({ minLength: 1, maxLength: 80 })),
     }),
     enums: { action: SOURCE_ACTIONS },
     example: { action: "rank_down", name: "pi changelog" },
@@ -245,9 +245,9 @@ export function openTab(deps: Deps) {
       "Text: how many news cards matched and the newest of them (card id, title, publish date). The tab opens even when nothing matches.",
     description:
       "Open a tab in the reader's news column with the same search their search box runs. by search matches every word in a card's text, by keyword a topic keyword (the card's topic or a mention), by url an article link or a site (example.com). Use it when the reader asks to see, find or filter news, then answer briefly.",
-    parameters: Type.Object({
+    parameters: schema.obj({
       by: literals(TAB_BYS),
-      value: Type.String({ minLength: 1, maxLength: 200 }),
+      value: schema.str({ minLength: 1, maxLength: 200 }),
     }),
     enums: { by: TAB_BYS },
     example: { by: "keyword", value: "durable agents" },
@@ -279,9 +279,9 @@ export function setSchedule(deps: Deps) {
       "Text: how often scheduled sweeps now run, how many cards each presents, and when the next one starts.",
     description:
       "Change the sweep schedule, like the menus in the reader's top bar. every: how often scheduled sweeps run, every 1, 5, 10, 15, 30 or 60 minutes, or off. cards: the most cards one sweep presents, 1 to 30 (jev ranks the candidates and keeps the top ones). Give either or both. Use it only when the reader asks.",
-    parameters: Type.Object({
-      every: Type.Optional(literals(EVERY)),
-      cards: Type.Optional(Type.Integer({ minimum: 1, maximum: MAX_CARDS })),
+    parameters: schema.obj({
+      every: schema.opt(literals(EVERY)),
+      cards: schema.opt(schema.int({ minimum: 1, maximum: MAX_CARDS })),
     }),
     enums: { every: EVERY },
     example: { cards: 7 },
@@ -324,7 +324,7 @@ export function highlightItem(deps: Deps) {
     returns: "Text: the card the reader's browser scrolled to and highlighted.",
     description:
       "Point the reader at a news card: their browser switches to the News tab, scrolls to the card and highlights it. Give card_id, or item_id for the item's card. Use it when you tell the reader about one card they should look at.",
-    parameters: Type.Object(CARD_PARAMS),
+    parameters: schema.obj(CARD_PARAMS),
     example: { card_id: 22 },
     replay: "safe",
     execute: async (args) => {

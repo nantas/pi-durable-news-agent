@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import * as schema from "@earendil-works/pi-schema";
 import { defineAppTool, toolError, toolText } from "@dna/durable-agent";
 import type { Deps } from "../../deps.ts";
 
@@ -9,9 +9,9 @@ export function askTaste(deps: Deps) {
       "Text: the question id it asked about the item, or the question already open for it. The question shows as a card in the reader's feed.",
     description:
       "Ask the reader to label one item as Hype, Facts and or Signal. Shows a question card in the chat with three chips. Does not wait for the answer; the answer arrives later as a message.",
-    parameters: Type.Object({
-      item_id: Type.Integer(),
-      question: Type.String({ minLength: 8, maxLength: 200 }),
+    parameters: schema.obj({
+      item_id: schema.int(),
+      question: schema.str({ minLength: 8, maxLength: 200 }),
     }),
     replay: "safe",
     execute: async (args, api) => {

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -109,6 +109,30 @@ test("a source added to config later reaches an existing database once, and a re
     assert.ok(store.sources.list().every((s) => s.origin === "config"));
     store.close();
   } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("source kind migration preserves referenced source ids and restores FK enforcement", () => {
+  const dir = temp();
+  const db = openDb(join(dir, "dna.sqlite"));
+  try {
+    db.exec(readFileSync(join(import.meta.dirname, "../src/db/migrations/001_schema.sql"), "utf8"));
+    db.exec("CREATE TABLE schema_migrations(name TEXT PRIMARY KEY, applied_at TEXT NOT NULL)");
+    db.prepare("INSERT INTO schema_migrations VALUES (?, ?)").run("001_schema.sql", "fixture");
+    db.exec(
+      "INSERT INTO sources(id,kind,name,url,created_at) VALUES (1,'rss','Existing','https://example.com/feed','fixture')",
+    );
+    db.exec(
+      "INSERT INTO items(source_id,url,url_hash,title,created_at,updated_at) VALUES (1,'https://example.com/item','fixture','Existing material','fixture','fixture')",
+    );
+    migrate(db);
+    assert.equal(db.prepare("SELECT source_id FROM items").get()?.source_id, 1);
+    assert.equal(db.prepare("SELECT name FROM sources WHERE id=1").get()?.name, "Existing");
+    assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+    assert.equal(db.prepare("PRAGMA foreign_keys").get()?.foreign_keys, 1);
+  } finally {
+    db.close();
     rmSync(dir, { recursive: true, force: true });
   }
 });

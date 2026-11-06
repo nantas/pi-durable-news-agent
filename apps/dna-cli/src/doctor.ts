@@ -1,41 +1,39 @@
 // dna doctor: Node 24, keys present (names only), the API, the scope matrix, the crontab line, search mode and credits.
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
 import type { DnaClient } from "@dna/sdk";
-import { repoRoot } from "@dna/sdk/node";
 import { managedLine, readCrontab } from "../../dna-server-cron/src/crontab.ts";
 import { probe, type Check } from "./net/probe.ts";
+import { localDoctor } from "./local-doctor.ts";
 import { searchEngines } from "./print.ts";
 
-const KEYS = [
-  "OPENROUTER_API_KEY",
-  "OPENAI_API_KEY",
-  "FIRECRAWL_API_KEY",
-  "DNA_CLIENT_TOKEN",
-  "DNA_CRON_TOKEN",
-];
+const KEYS = ["FIRECRAWL_API_KEY", "DNA_CLIENT_TOKEN", "DNA_CRON_TOKEN"];
 const OPTIONAL: Record<string, string> = {
-  OPENAI_API_KEY: "missing, cards without a source image show none",
   FIRECRAWL_API_KEY: "missing, search and page reads use the free engines",
 };
 
 export async function doctor(
   client: DnaClient,
   tokens: { client?: string; cron?: string },
+  options: { live?: boolean } = {},
 ): Promise<Check[]> {
   const checks: Check[] = [];
   const major = Number(process.versions.node.split(".")[0]);
   checks.push({ name: "Node 24", ok: major >= 24, detail: process.versions.node });
-  const envFile = join(repoRoot(), ".env");
-  const env = existsSync(envFile) ? readFileSync(envFile, "utf8") : "";
   for (const key of KEYS) {
-    const present = new RegExp(`^${key}=.+`, "m").test(env) || !!process.env[key];
+    const present = !!process.env[key]?.trim();
     checks.push({
       name: `${key} is set`,
-      ok: present || key in OPTIONAL,
+      ok: present,
+      required: !(key in OPTIONAL),
       detail: present ? "present" : (OPTIONAL[key] ?? "missing"),
     });
   }
+  const sources = await client.sources().catch(() => []);
+  checks.push(
+    ...(await localDoctor({
+      live: options.live,
+      enabledKinds: sources.filter((source) => source.enabled).map((source) => source.kind),
+    })),
+  );
   checks.push(...(await probe(client.baseUrl, tokens)));
   let cronLine: string | undefined;
   try {

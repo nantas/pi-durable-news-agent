@@ -1,7 +1,7 @@
 // Sources and their content cache.
 import { createHash } from "node:crypto";
-import type { Source, SourceKind, SourceLead, SourceOrigin } from "@dna/sdk";
-import { bind, bool, type Db, nowIso, num, str } from "../db.ts";
+import type { Source, SourceKind, SourceLead, SourceOrigin, SourceOptions } from "@dna/sdk";
+import { bind, bool, type Db, nowIso, num, parse, str } from "../db.ts";
 
 export const urlHash = (url: string) =>
   createHash("sha256").update(canonicalUrl(url)).digest("hex").slice(0, 32);
@@ -28,6 +28,7 @@ export interface SourceSeed {
   query?: string;
   weight?: number;
   interval_min?: number;
+  options?: SourceOptions;
 }
 
 export interface CachedDoc {
@@ -44,6 +45,7 @@ export interface CachedDoc {
   discussionUrl?: string;
   points?: number;
   comments?: number;
+  metadata?: Record<string, unknown>;
   fetchVia: string;
   fetchedAt: string;
   expiresAt: string;
@@ -62,6 +64,7 @@ const toSource = (r: any): Source => ({
   weight: r.weight,
   intervalMin: r.interval_min,
   enabled: bool(r.enabled),
+  options: parse(r.options_json, {}),
   failCount: r.fail_count,
   lastStatus: str(r.last_status),
   lastError: str(r.last_error),
@@ -95,6 +98,7 @@ const toCached = (r: any): CachedDoc => ({
   discussionUrl: str(r.discussion_url),
   points: num(r.points),
   comments: num(r.comments),
+  metadata: parse(r.metadata_json, undefined),
   fetchVia: r.fetch_via,
   fetchedAt: r.fetched_at,
   expiresAt: r.expires_at,
@@ -105,12 +109,13 @@ export class SourcesRepo {
 
   seed(seeds: SourceSeed[]): number {
     const insert = this.db.prepare(
-      "INSERT OR IGNORE INTO sources (kind, name, url, query, weight, interval_min, origin, created_at) VALUES (:kind, :name, :url, :query, :weight, :interval_min, 'config', :created_at)",
+      "INSERT OR IGNORE INTO sources (kind, name, url, query, weight, interval_min, options_json, origin, created_at) VALUES (:kind, :name, :url, :query, :weight, :interval_min, :options, 'config', :created_at)",
     );
     let added = 0;
     for (const s of seeds) {
       const r = insert.run(
         bind({
+          options: s.options ?? {},
           kind: s.kind,
           name: s.name,
           url: s.url ?? "",
@@ -140,7 +145,13 @@ export class SourcesRepo {
       (s) =>
         s.enabled &&
         (!s.lastFetchedAt ||
-          now.getTime() - Date.parse(s.lastFetchedAt) >= s.intervalMin * 60_000 - 30_000),
+          now.getTime() - Date.parse(s.lastFetchedAt) >=
+            s.intervalMin *
+              (["youtube_channel", "github_topic"].includes(s.kind)
+                ? 2 ** Math.min(s.failCount, 6)
+                : 1) *
+              60_000 -
+              30_000),
     );
   }
 
@@ -369,8 +380,8 @@ export class SourcesRepo {
     const expiresAt = new Date(now.getTime() + input.ttlMinutes * 60_000).toISOString();
     this.db
       .prepare(
-        `INSERT INTO source_cache (source_id, url, url_hash, title, author, published_at, excerpt, content_md, image_url, discussion_url, points, comments, fetch_via, fetched_at, expires_at, bytes)
-         VALUES (:source_id, :url, :url_hash, :title, :author, :published_at, :excerpt, :content_md, :image_url, :discussion_url, :points, :comments, :fetch_via, :fetched_at, :expires_at, :bytes)
+        `INSERT INTO source_cache (source_id, url, url_hash, title, author, published_at, excerpt, content_md, image_url, discussion_url, points, comments, fetch_via, fetched_at, expires_at, bytes, metadata_json)
+         VALUES (:source_id, :url, :url_hash, :title, :author, :published_at, :excerpt, :content_md, :image_url, :discussion_url, :points, :comments, :fetch_via, :fetched_at, :expires_at, :bytes, :metadata)
          ON CONFLICT (url_hash) DO UPDATE SET
            source_id = COALESCE(source_cache.source_id, excluded.source_id),
            title = COALESCE(excluded.title, source_cache.title),
@@ -384,7 +395,8 @@ export class SourcesRepo {
            comments = COALESCE(excluded.comments, source_cache.comments),
            fetch_via = CASE WHEN length(COALESCE(excluded.content_md, '')) >= length(COALESCE(source_cache.content_md, '')) THEN excluded.fetch_via ELSE source_cache.fetch_via END,
            fetched_at = excluded.fetched_at,
-           expires_at = excluded.expires_at`,
+           expires_at = excluded.expires_at,
+           metadata_json = COALESCE(excluded.metadata_json, source_cache.metadata_json)`,
       )
       .run(
         bind({
@@ -404,6 +416,7 @@ export class SourcesRepo {
           fetched_at: fetchedAt,
           expires_at: expiresAt,
           bytes: input.contentMd?.length,
+          metadata: input.metadata,
         }),
       );
     return this.cached(input.url)!;

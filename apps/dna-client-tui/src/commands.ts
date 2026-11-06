@@ -41,6 +41,12 @@ function lastWord(
 export function buildCommands(state: CompletionState): Command[] {
   const cards = (arg: string) => lastWord(arg, (i) => (i === 0 ? state.cardIds() : []));
   return [
+    { name: "calibrate", cap: "feedback.calibrate", description: "评分不准：<card id> <message>" },
+    {
+      name: "bookmarks",
+      cap: "bookmarks",
+      description: "list | add <card> | note <id> <text> | rm <id>",
+    },
     { name: "chat", cap: "chat.watch", description: "the agent and its tool calls, live" },
     { name: "feed", cap: "feed.read", description: "news worth your attention, oldest first" },
     {
@@ -148,7 +154,7 @@ export function buildCommands(state: CompletionState): Command[] {
       name: "model",
       cap: "agent.model",
       description: "list models, or pick one; quick <id> picks the one-shot model",
-      argumentHint: "[quick] [id]",
+      argumentHint: "[quick|research|coverage|summary] [id]",
       getArgumentCompletions: (arg) => items(state.models(), arg),
     },
     {

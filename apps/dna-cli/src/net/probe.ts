@@ -1,5 +1,6 @@
 // The scope matrix, checked over HTTP against any device URL.
 export interface Check {
+  required?: boolean;
   name: string;
   ok: boolean;
   detail: string;

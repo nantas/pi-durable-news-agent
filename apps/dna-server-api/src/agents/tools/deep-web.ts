@@ -3,7 +3,7 @@
 // FIRECRAWL_API_KEY is set, the free Bing web search and direct fetches when not. Neither adds items to the news feed.
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { Type } from "@earendil-works/pi-ai";
+import * as schema from "@earendil-works/pi-schema";
 import { defineAppTool, toolError, toolText } from "@dna/durable-agent";
 import type { Deps } from "../../deps.ts";
 import { CHUNK_CHARS, savedText, scrapeFile } from "./hyper-fetch.ts";
@@ -16,15 +16,15 @@ export function deepSearch(deps: Deps) {
       "Text: how many results and from where, then one block per hit (number, title, site, url, snippet and date when known).",
     description:
       "Search the whole web, not only news: company sites, docs, filings, papers, repos, reporting and discussion. Best match first. Leave hours out to search any date. Open the promising hits with open_page.",
-    parameters: Type.Object({
-      query: Type.String({ minLength: 2, maxLength: 300 }),
-      hours: Type.Optional(
-        Type.Integer({
+    parameters: schema.obj({
+      query: schema.str({ minLength: 2, maxLength: 300 }),
+      hours: schema.opt(
+        schema.int({
           minimum: 1,
           description: "Only results published in the last N hours. Leave out for any date.",
         }),
       ),
-      limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 20 })),
+      limit: schema.opt(schema.int({ minimum: 1, maximum: 20 })),
     }),
     example: { query: "durable execution for AI agents checkpoint replay" },
     replay: "safe",
@@ -59,10 +59,10 @@ export function openPage(deps: Deps) {
     returns:
       "Text: the page title, how it was fetched and which chunk of how many, then that chunk as markdown. The last chunk ends with every link on the page (text and url) to follow next.",
     description: `Read one web page in full and see the links on it, so you can follow them to the next page. Pages longer than ${CHUNK_CHARS} characters come in chunks: call again with the next chunk. The links on the page are listed at the end of the last chunk. Give url, or item_id for a news item's page. A page read in the last day is read again for free.`,
-    parameters: Type.Object({
-      url: Type.Optional(Type.String()),
-      item_id: Type.Optional(Type.Integer()),
-      chunk: Type.Optional(Type.Integer({ minimum: 1 })),
+    parameters: schema.obj({
+      url: schema.opt(schema.str()),
+      item_id: schema.opt(schema.int()),
+      chunk: schema.opt(schema.int({ minimum: 1 })),
     }),
     example: { url: "https://www.anthropic.com/engineering", chunk: 1 },
     replay: "safe",

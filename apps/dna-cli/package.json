@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@dna/sdk": "*",
+    "@earendil-works/pi-coding-agent": "1.5.0",
     "yaml": "2.9.1"
   }
 }

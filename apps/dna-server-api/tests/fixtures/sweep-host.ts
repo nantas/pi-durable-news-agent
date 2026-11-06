@@ -12,6 +12,14 @@ process.env.DNA_LOG_DIR = `${dir}/logs`;
 const config = loadConfig([], {
   ...process.env,
   DNA_PROVIDER: "faux",
+  DNA_WIKI_DIR: "",
+  JEV_BACKEND: "fixture",
+  DNA_MODEL: "faux-haiku",
+  DNA_RESEARCH_MODEL: "faux-haiku",
+  DNA_QUICK_MODEL: "anthropic/claude-haiku-5.5",
+  DNA_COVERAGE_MODEL: "faux-haiku",
+  DNA_DEEP_RESEARCH_MODEL: "anthropic/claude-haiku-5.5",
+  DNA_SUMMARY_MODEL: "faux-haiku",
   DNA_SEARCH_MODE: "fixture",
   DNA_DATA_DIR: dir,
 });

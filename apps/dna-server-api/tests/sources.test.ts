@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { canonicalUrl } from "../src/db/repos/sources.ts";
 import { extractArticle } from "../src/news/extract.ts";
-import { FIXTURES_DIR, fixtureHttp } from "../src/news/fixtures.ts";
+import { FIXTURES_DIR, fixtureCommand, fixtureHttp } from "../src/news/fixtures.ts";
 import type { Http } from "../src/news/http.ts";
 import { fetchSource } from "../src/news/sources/index.ts";
 import { parseFeed } from "../src/news/sources/rss.ts";
@@ -55,6 +55,7 @@ test("every default source fetches through fixtures and caches its entries", asy
     for (const source of store.sources.list())
       results.push(
         await fetchSource(source, {
+          run: fixtureCommand,
           http,
           store,
           since: new Date(Date.now() - 3_600_000),
@@ -215,6 +216,63 @@ test("every sweep checks a source, but an unchanged one hands nothing to jev; a 
       assert.equal(limited.status, "429 rate limited");
     }
     assert.equal(store.sources.list().find((s) => s.id === source.id)!.enabled, true);
+  } finally {
+    cleanup();
+  }
+});
+
+test("configured listing paths, bounded pages and noise filters use one canonical pipeline", async () => {
+  const { store, cleanup } = tempStore();
+  try {
+    store.sources.seed([
+      {
+        kind: "web_page",
+        name: "Design fixture",
+        url: "https://example.com/design",
+        options: { paths: ["/design/"], pages: ["/design?page=1"], excludeTerms: ["discount"] },
+      },
+    ]);
+    const source = store.sources.list().find((s) => s.name === "Design fixture")!;
+    const requests: string[] = [];
+    const http: Http = {
+      postJson: async () => {
+        throw new Error("unused");
+      },
+      async get(url) {
+        requests.push(url);
+        return {
+          url,
+          status: 200,
+          headers: new Headers(),
+          text: `<a href="/design/method?utm_source=test">A reusable design method</a><a href="/design/sale">Discount offer for tools</a><a href="/business/other">Unrelated business story</a>`,
+        };
+      },
+    };
+    const first = await fetchSource(source, { http, store, since: new Date(0) });
+    assert.equal(requests.length, 2);
+    assert.equal(first.docs.length, 1);
+    assert.equal(first.docs[0].publishedAt, undefined);
+    assert.equal(
+      first.docs[0].urlHash,
+      store.sources.cache({
+        url: "https://example.com/design/method",
+        title: "Same material",
+        fetchVia: "feed",
+        ttlMinutes: 60,
+      }).urlHash,
+    );
+    const second = await fetchSource(source, { http, store, since: new Date(0) });
+    assert.equal(second.status, "unchanged");
+    assert.equal(second.docs.length, 0);
+    assert.equal(
+      listingLinks(
+        '<a href="/design/old">An older design method</a>',
+        source.url,
+        30,
+        source.options?.paths,
+      ).length,
+      1,
+    );
   } finally {
     cleanup();
   }

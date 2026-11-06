@@ -71,6 +71,7 @@ test("SSE frames reduce to the same transcript as /v1/agent/transcript, and feed
       (b) => b.type === "tool" && b.call.name === "present_news" && b.call.status === "done",
     ).length >= 4,
   );
+  await until(() => feed.state.agent?.busy === false, "the final idle state frame");
   assert.equal(feed.state.agent?.busy, false);
 
   stop.abort();

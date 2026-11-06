@@ -1,6 +1,7 @@
 // Typed client for one dna-server-api. Works in browsers and Node (fetch and streams). `token` is optional: the
 // browser hub injects it, so the browser never holds one.
 import type {
+  Bookmark,
   AgentConfigBody,
   AgentState,
   Card,
@@ -64,6 +65,19 @@ export class DnaClient {
     private readonly token?: string,
   ) {
     this.baseUrl = baseUrl.replace(/\/+$/, "");
+  }
+
+  bookmarks() {
+    return this.call<Bookmark[]>("bookmarks.list");
+  }
+  addBookmark(cardId: number, note = "") {
+    return this.call<Bookmark>("bookmarks.add", { body: { cardId, note } });
+  }
+  updateBookmark(id: number, note: string) {
+    return this.call<Bookmark>("bookmarks.update", { params: { id }, body: { note } });
+  }
+  removeBookmark(id: number) {
+    return this.call<{ ok: true }>("bookmarks.remove", { params: { id } });
   }
 
   private headers(json: boolean, extra: Record<string, string> = {}) {

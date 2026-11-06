@@ -43,8 +43,8 @@ test("the workflow route: replay by requestId, skip while running, and the sweep
   );
   assert.equal(feed.items.filter((c) => c.timeline).length, 0, "unrelated stories stay separate");
   assert.ok(
-    feed.items.every((c, i) => i === 0 || c.id > feed.items[i - 1].id),
-    "oldest first",
+    feed.items.every((c, i) => i === 0 || c.discoveredAt! <= feed.items[i - 1].discoveredAt!),
+    "pending cards are newest discovery first",
   );
   const image = await fetch(`${s.base}/v1/images/${feed.items[0].image!.id}`, {
     headers: { authorization: `Bearer ${s.tokens.client}` },

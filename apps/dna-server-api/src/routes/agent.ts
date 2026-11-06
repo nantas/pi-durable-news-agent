@@ -109,6 +109,9 @@ export function agentRoutes({
     "agent.get": async (_req, res) => res.json(await agentState(app)),
     "agent.config": async (req, res) => {
       const body = bodyOf(req);
+      const researchModel = str(body, "researchModel", { max: 120, optional: true });
+      const coverageModel = str(body, "coverageModel", { max: 120, optional: true });
+      const summaryModel = str(body, "summaryModel", { max: 120, optional: true });
       const model = str(body, "model", { max: 120, optional: true });
       const thinkingLevel = oneOf(body.thinkingLevel, "thinkingLevel", THINKING, true);
       const quickModel = str(body, "quickModel", { max: 120, optional: true });
@@ -126,6 +129,9 @@ export function agentRoutes({
         integer: true,
       });
       if (
+        !researchModel &&
+        !coverageModel &&
+        !summaryModel &&
         !model &&
         !thinkingLevel &&
         !quickModel &&
@@ -137,7 +143,14 @@ export function agentRoutes({
         throw invalid(
           "Send model, thinkingLevel, quickModel, quickThinking, deepResearchModel, deepResearchThinking, deepResearchCount, or a mix",
         );
-      for (const id of [model, quickModel, deepResearchModel])
+      for (const id of [
+        model,
+        quickModel,
+        deepResearchModel,
+        researchModel,
+        coverageModel,
+        summaryModel,
+      ])
         if (id && !app.catalog.info(id))
           throw invalid(
             `Unknown model ${id}. Known: ${app.catalog
@@ -145,6 +158,9 @@ export function agentRoutes({
               .map((m) => m.id)
               .join(", ")}`,
           );
+      if (researchModel) app.store.settings.set("researchModel", researchModel);
+      if (coverageModel) app.coverage.set({ model: coverageModel });
+      if (summaryModel) app.summary.set({ model: summaryModel });
       if (quickModel || quickThinking)
         app.quick.set({
           ...(quickModel ? { model: quickModel } : {}),
@@ -193,11 +209,15 @@ export function agentRoutes({
     "agent.messages": async (req, res) => {
       const body = bodyOf(req);
       const content = str(body, "content", { max: 100_000 });
+      const cardId = optInt(body.cardId, "cardId");
+      const card = cardId === undefined ? undefined : app.store.news.card(cardId);
+      if (cardId !== undefined && !card) throw notFound(`No card ${cardId}`);
+      const message = card ? JSON.stringify({ cardContext: card, userMessage: content }) : content;
       const requestId = str(body, "requestId", { max: 128 });
       const mode = oneOf(body.mode, "mode", ["followUp", "steer"] as const, true) ?? "followUp";
       const waitMs = num(body, "waitMs", { min: 0, max: 300_000, integer: true }) ?? 0;
       const submission = await app.main.submit(
-        { type: "input", content, requestId: `chat:${requestId}`, whenBusy: mode },
+        { type: "input", content: message, requestId: `chat:${requestId}`, whenBusy: mode },
         ctx,
       );
       app.log.info("agent.message", { submissionId: submission.id, mode, chars: content.length });
@@ -217,12 +237,12 @@ export function agentRoutes({
       const conversation = await conversationOf(optInt(req.query.conversationId, "conversationId"));
       const format =
         oneOf(req.query.format, "format", ["json", "markdown"] as const, true) ?? "json";
-      const view = await conversation.viewState(ctx);
+      const view = await conversation.watch(ctx, { min: 1000, max: 2000 });
       let entries: WireEntry[];
       try {
         entries = JSON.parse(JSON.stringify(view.value.entries)) as WireEntry[];
       } finally {
-        view.dispose();
+        await view.stop();
       }
       const items = toTranscript(entries);
       res.json(

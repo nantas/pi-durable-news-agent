@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import * as schema from "@earendil-works/pi-schema";
 import { defineAppTool, toolError, toolText } from "@dna/durable-agent";
 import type { Deps } from "../../deps.ts";
 import { JEV_COMMANDS } from "../../news/hfs.ts";
@@ -8,20 +8,22 @@ import { weightsOf } from "../../news/rank.ts";
 import { FixableError, ref, requireItem } from "./shared.ts";
 
 export function jevClassify(deps: Deps) {
+  const commands =
+    deps.config.provider === "faux" ? JEV_COMMANDS : JEV_COMMANDS.filter((name) => name !== "hfs");
   return defineAppTool({
     name: "jev_classify",
     returns:
       "Text: the item id, the jev command and its result, for hfs the ranked Hype, Facts and Signal scores with the primary category and labels.",
     description:
       "Run a jev classifier on one item. hfs: rank Hype, Facts and Signal (0 to 100, always ranked). relevance and worth-attention: the gate scores. claim-support: one yes or no per claim, give claims and optionally evidence text. same-story: compare with another item (other_item_id). importance: how much the reader would care, given their topic and source weights.",
-    parameters: Type.Object({
-      command: Type.Union(JEV_COMMANDS.map((c) => Type.Literal(c))),
-      item_id: Type.Integer(),
-      claims: Type.Optional(Type.Array(Type.String(), { maxItems: 8 })),
-      evidence: Type.Optional(Type.String()),
-      other_item_id: Type.Optional(Type.Integer()),
+    parameters: schema.obj({
+      command: schema.union(commands.map((c) => schema.lit(c))),
+      item_id: schema.int(),
+      claims: schema.opt(schema.arr(schema.str(), { maxItems: 8 })),
+      evidence: schema.opt(schema.str()),
+      other_item_id: schema.opt(schema.int()),
     }),
-    enums: { command: JEV_COMMANDS },
+    enums: { command: commands },
     example: { command: "hfs", item_id: 12 },
     replay: "safe",
     execute: async (args, api, ctx) => {

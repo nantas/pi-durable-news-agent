@@ -3,7 +3,7 @@
 //   host.ts <dir> resume
 import { appendFileSync } from "node:fs";
 import { join } from "node:path";
-import { Type } from "@earendil-works/pi-ai";
+import * as schema from "@earendil-works/pi-schema";
 import { defineExtension } from "@earendil-works/pi-durable";
 import { call, defineAppTool, once, say, spawnSubagents, toolText } from "../../src/index.ts";
 import { fauxHarness } from "../helpers.ts";
@@ -15,7 +15,7 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const slowSafe = defineAppTool({
   name: "slow_safe",
   description: "A replay-safe slow effect",
-  parameters: Type.Object({}),
+  parameters: schema.obj({}),
   replay: "safe",
   execute: async (_args, api, ctx) => {
     await once(api, "effect", ctx, async () => {
@@ -30,7 +30,7 @@ const slowSafe = defineAppTool({
 const slowUnsafe = defineAppTool({
   name: "slow_unsafe",
   description: "An unsafe slow effect",
-  parameters: Type.Object({}),
+  parameters: schema.obj({}),
   execute: async (_args, api) => {
     appendFileSync(effects, `unsafe ${api.callId}\n`);
     await sleep(Number(process.env.SLOW_MS ?? 1500));
@@ -41,7 +41,7 @@ const slowUnsafe = defineAppTool({
 const spawnTwo = defineAppTool({
   name: "spawn_two",
   description: "Run two child agents",
-  parameters: Type.Object({}),
+  parameters: schema.obj({}),
   replay: "safe",
   execute: async (_args, api, ctx) => {
     const results = await spawnSubagents(

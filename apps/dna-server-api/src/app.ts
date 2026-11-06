@@ -7,6 +7,7 @@ import { idempotent } from "./idempotency.ts";
 import { requestLog } from "./request-log.ts";
 import { agentRoutes } from "./routes/agent.ts";
 import { executionRoutes } from "./routes/executions.ts";
+import { bookmarkRoutes } from "./routes/bookmarks.ts";
 import { feedRoutes } from "./routes/feed.ts";
 import { infoRoutes } from "./routes/info.ts";
 import { keywordRoutes } from "./routes/keywords.ts";
@@ -27,6 +28,7 @@ export function createHttpApp(app: App) {
     ...workflowRoutes(deps),
     ...scheduleRoutes(deps),
     ...feedRoutes(deps),
+    ...bookmarkRoutes(deps),
     ...tasteRoutes(deps),
     ...keywordRoutes(deps),
     ...sourceRoutes(deps),

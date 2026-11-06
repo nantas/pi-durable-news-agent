@@ -33,7 +33,6 @@ const KEY_ENV = {
 /** Catalog price for ~typesafe/jev-latest on OpenRouter (pi-ai 1.1.0): $0.042 per 1M input tokens, output free. */
 const DEFAULT_PRICING: Partial<Record<JevProvider, JevPricing>> = {
   openrouter: { inputPerMillion: 0.042, outputPerMillion: 0 },
-  typesafe: { inputPerMillion: 0.042, outputPerMillion: 0 },
 };
 
 const RETRY_STATUSES = new Set([429, 502, 503, 529]);
@@ -185,7 +184,11 @@ export class JevClient {
       opts.model ??
       this.model ??
       (this.provider === "mock" ? this.mock.model : DEFAULT_MODELS[this.provider]);
-    const body: SystemOneRequest = { model: requestedModel, state, questions };
+    const resolvedModel =
+      this.provider === "typesafe" && requestedModel.startsWith("~typesafe/")
+        ? requestedModel.slice("~typesafe/".length)
+        : requestedModel;
+    const body: SystemOneRequest = { model: resolvedModel, state, questions };
     validateRequest(body);
     let requestText: string;
     try {
@@ -242,14 +245,20 @@ export class JevClient {
           continue;
         }
         if (!res.ok) {
-          await res.body?.cancel();
+          const detail = (await res.json().catch(() => undefined)) as
+            | { detail?: { error_type?: unknown } }
+            | undefined;
+          const contextHint =
+            detail?.detail?.error_type === "max_tokens_exceeded"
+              ? " Input exceeds the model context budget."
+              : "";
           const hint =
             res.status === 401
               ? ` Check the ${KEY_ENV[this.provider]} key.`
               : res.status === 402
                 ? " Check account credits."
                 : "";
-          throw new Error(`${this.provider} HTTP ${res.status}.${hint}`);
+          throw new Error(`${this.provider} HTTP ${res.status}.${hint}${contextHint}`);
         }
         const responseText = await res.text();
         signal.throwIfAborted();

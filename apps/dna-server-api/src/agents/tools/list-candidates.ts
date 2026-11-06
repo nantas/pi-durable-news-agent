@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import * as schema from "@earendil-works/pi-schema";
 import { defineAppTool, toolError, toolText } from "@dna/durable-agent";
 import type { Deps } from "../../deps.ts";
 import { itemLine } from "./shared.ts";
@@ -10,7 +10,7 @@ export function listCandidates(deps: Deps) {
       "Text: one line per candidate (id, title, source, attention and status), or that the sweep has none.",
     description:
       "List the ranked candidates of a sweep again, one line each, with research and presentation status.",
-    parameters: Type.Object({ sweep_id: Type.Integer() }),
+    parameters: schema.obj({ sweep_id: schema.int() }),
     replay: "safe",
     execute: async (args) => {
       if (!deps.store.sweeps.get(args.sweep_id)) return toolError(`No sweep #${args.sweep_id}.`);

@@ -1,21 +1,22 @@
-import { Type } from "@earendil-works/pi-ai";
+import { ensureAssessmentBatch, type createAssessmentTask } from "../../news/assessment-task.ts";
+import * as schema from "@earendil-works/pi-schema";
 import { defineAppTool, toolError, toolText } from "@dna/durable-agent";
 import type { Deps } from "../../deps.ts";
 import { auditSweep } from "../../news/audit.ts";
 
 const STATUSES = ["presented", "no_news"] as const;
 
-export function completeSweep(deps: Deps) {
+export function completeSweep(deps: Deps, assessmentTask: ReturnType<typeof createAssessmentTask>) {
   return defineAppTool({
     name: "complete_sweep",
     returns:
       "Text: the sweep id, completed or closed with no news, and how many cards it presented. Runs the sweep audit.",
     description:
       "The last call of every sweep. status presented when you presented at least one card, no_news when nothing was worth attention. summary is one sentence.",
-    parameters: Type.Object({
-      sweep_id: Type.Integer(),
-      status: Type.Union(STATUSES.map((s) => Type.Literal(s))),
-      summary: Type.String({ minLength: 5, maxLength: 400 }),
+    parameters: schema.obj({
+      sweep_id: schema.int(),
+      status: schema.union(STATUSES.map((s) => schema.lit(s))),
+      summary: schema.str({ minLength: 5, maxLength: 400 }),
     }),
     enums: { status: STATUSES },
     example: {
@@ -24,7 +25,7 @@ export function completeSweep(deps: Deps) {
       summary: "Three releases worth attention, one hype watch.",
     },
     replay: "safe",
-    execute: async (args) => {
+    execute: async (args, api, ctx) => {
       const sweep = deps.store.sweeps.get(args.sweep_id);
       if (!sweep) return toolError(`No sweep #${args.sweep_id}.`);
       const cards = (
@@ -36,6 +37,11 @@ export function completeSweep(deps: Deps) {
         return toolError("complete_sweep failed: status presented but this sweep has no cards.", [
           "Present at least one card, or use status no_news.",
         ]);
+      if (cards > 0)
+        await api.commit(
+          (tx) => ensureAssessmentBatch(tx, api.conversationId, sweep.id, assessmentTask),
+          ctx,
+        );
       const status = args.status === "presented" ? "completed" : "no_news";
       const endedAt = new Date().toISOString();
       deps.store.sweeps.update(sweep.id, {

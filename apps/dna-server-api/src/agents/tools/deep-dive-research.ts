@@ -1,7 +1,7 @@
 // deep_dive_research: hand a question the reader wants dug into to deep-research subagents and return at once. The
 // subagents and the background dna.deep-research task that drives them are created in one commit, at most once per
 // call, and each subagent's answer comes back to the desk as its own message when it finishes.
-import { Type } from "@earendil-works/pi-ai";
+import * as schema from "@earendil-works/pi-schema";
 import { configure, type AgentChange, type Task } from "@earendil-works/pi-durable";
 import { defineAppTool, onceInCommit, toolError, toolText } from "@dna/durable-agent";
 import type { Deps } from "../../deps.ts";
@@ -21,11 +21,11 @@ export function deepDiveResearch(
     returns:
       "Text: the deep research id, how many deep-research subagents started, and their model and thinking level. Each subagent's answer arrives later as its own message.",
     description: `Start deep research on a question the reader asked you to dig into, investigate or deep dive, when one search and one read cannot answer it. Deep-research subagents follow links 2 to 10 pages deep in the background and each one's answer comes back as its own message when it finishes, so this returns at once. Give the question in full, and card_id or item_id when it is about a card. count (1 to ${MAX_DEEP_RESEARCHERS}) only when the reader names how many researchers; otherwise the reader's setting decides. Use it only when the reader asks.`,
-    parameters: Type.Object({
-      question: Type.String({ minLength: 5, maxLength: 2000 }),
-      card_id: Type.Optional(Type.Integer()),
-      item_id: Type.Optional(Type.Integer()),
-      count: Type.Optional(Type.Integer({ minimum: 1, maximum: MAX_DEEP_RESEARCHERS })),
+    parameters: schema.obj({
+      question: schema.str({ minLength: 5, maxLength: 2000 }),
+      card_id: schema.opt(schema.int()),
+      item_id: schema.opt(schema.int()),
+      count: schema.opt(schema.int({ minimum: 1, maximum: MAX_DEEP_RESEARCHERS })),
     }),
     example: {
       question:

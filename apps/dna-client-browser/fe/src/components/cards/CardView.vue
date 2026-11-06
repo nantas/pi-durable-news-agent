@@ -8,7 +8,7 @@ import { openTimeline } from "../../client/layout";
 import { clean } from "../../client/text";
 import { now, referenceInChat, ui } from "../../client/store";
 import FeedbackBar from "../FeedbackBar.vue";
-import HfsPill from "../HfsPill.vue";
+import { assessmentText } from "@dna/sdk";
 import { cardComponent } from "./registry";
 
 const props = defineProps<{ card: Card }>();
@@ -117,7 +117,7 @@ const image = computed(() =>
         <component :is="body" :card="card" />
       </div>
       <div class="card-foot">
-        <HfsPill :hfs="card.hfs" />
+        <span data-testid="assessment">{{ assessmentText(card.assessment) }}</span>
         <FeedbackBar :card="card" />
       </div>
     </div>

@@ -5,7 +5,7 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { Type } from "@earendil-works/pi-ai";
+import * as schema from "@earendil-works/pi-schema";
 import { defineAppTool, toolError, toolText } from "@dna/durable-agent";
 import type { Deps } from "../../deps.ts";
 import { ref } from "./shared.ts";
@@ -33,10 +33,10 @@ export function hyperFetch(deps: Deps) {
       "Text: the article title, how it was fetched (firecrawl with its credits, a direct fetch, or the saved copy) and which chunk of how many, then that chunk of the article as markdown, then the next chunk to read or the end.",
     description:
       "Read one article in full (through Firecrawl when it is set up, otherwise a direct fetch). Use it only when the reader explicitly asks for a breakdown of an article. Long articles come back in chunks: read every chunk, calling again with the next chunk until the result says end of article, then break it down for the reader. Never use it during a sweep or for research: read_item and scrape_url cover those. Give url, or item_id for an item's page. Only the first chunk fetches the page; later chunks read the saved copy.",
-    parameters: Type.Object({
-      url: Type.Optional(Type.String()),
-      item_id: Type.Optional(Type.Integer()),
-      chunk: Type.Optional(Type.Integer({ minimum: 1 })),
+    parameters: schema.obj({
+      url: schema.opt(schema.str()),
+      item_id: schema.opt(schema.int()),
+      chunk: schema.opt(schema.int({ minimum: 1 })),
     }),
     example: { url: "https://example.com/blog/launch", chunk: 1 },
     replay: "safe",

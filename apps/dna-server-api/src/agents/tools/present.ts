@@ -1,16 +1,13 @@
 // present_news and present_timeline: the agent's generative UI. present_news renders one item as a card (enum
 // components, props checked against jev scores, one card per tool task so a replay returns the same card, images
-// resolved or generated in the background). present_timeline links presented cards about one story in date order.
-import { Type } from "@earendil-works/pi-ai";
-import type { Task, ToolExecutionApi } from "@earendil-works/pi-durable";
-import type { Context } from "@earendil-works/chord";
-import { defineAppTool, onceInCommit, toolError, toolText } from "@dna/durable-agent";
+// taken only from the source). present_timeline links presented cards about one story in date order.
+import * as schema from "@earendil-works/pi-schema";
+import { defineAppTool, toolError, toolText } from "@dna/durable-agent";
 import { NEWS_COMPONENTS, type Card, type HfsScores } from "@dna/sdk";
 import type { Deps } from "../../deps.ts";
 import type { Item } from "../../db/repos/news.ts";
 import { StoryMatcher } from "../../news/stories.ts";
 import { checkComponent } from "../../news/components.ts";
-import type { ImageInput } from "../../news/image-task.ts";
 
 const PROPS_HELP =
   "props holds the component's fields as short phrases: title, summary, dek, action, why, claim, verdict, evidence (array of urls), reality_check, name, version, changes (array), takes (array), quote, speaker, body, events (array of { date, text }), left, right.";
@@ -35,54 +32,16 @@ function hfsOf(deps: Deps, item: Item): HfsScores | undefined {
     : undefined;
 }
 
-async function imageFor(
-  deps: Deps,
-  item: Item | undefined,
-  title: string,
-  summary: string,
-): Promise<number> {
-  const existing = item ? await deps.images.resolve(item) : undefined;
-  if (existing) return existing;
-  return deps.images.pending(item?.id, deps.images.prompt({ title, summary }));
-}
-
-async function startImage(
-  api: ToolExecutionApi,
-  ctx: Context,
-  imageTask: Task<ImageInput, any, any, object>,
-  card: Card,
-  deps: Deps,
-) {
-  if (!card.image || card.image.status !== "pending") return;
-  const prompt = deps.store.db
-    .prepare("SELECT prompt FROM images WHERE id = ?")
-    .get(card.image.id) as { prompt: string } | undefined;
-  await onceInCommit<number>(
-    api,
-    ctx,
-    async (tx) =>
-      (await tx.createTask(
-        imageTask,
-        { imageId: card.image!.id, prompt: prompt?.prompt ?? card.title },
-        {
-          ownership: { kind: "conversation" },
-          conversationId: api.conversationId,
-          background: true,
-        },
-      )) as number,
-  );
-}
-
-export function presentNews(deps: Deps, imageTask: Task<ImageInput, any, any, object>) {
+export function presentNews(deps: Deps) {
   return defineAppTool({
     name: "present_news",
     returns:
       "Text: the card id, its component and the ranked H/F/S scores. A replay returns the same card.",
-    description: `Render one item as a news card in the reader's feed. component is one of: ${NEWS_COMPONENTS.join(", ")}. ${PROPS_HELP} Run jev_classify hfs first. The card shows jev's ranked Hype, Facts and Signal scores.`,
-    parameters: Type.Object({
-      item_id: Type.Integer(),
-      component: Type.Union(NEWS_COMPONENTS.map((c) => Type.Literal(c))),
-      props: Type.Record(Type.String(), Type.Unknown()),
+    description: `Render one item as a news card in the reader's feed. component is one of: ${NEWS_COMPONENTS.join(", ")}. ${PROPS_HELP} The card enters Feed pending assessment; complete_sweep starts background incremental scoring.`,
+    parameters: schema.obj({
+      item_id: schema.int(),
+      component: schema.union(NEWS_COMPONENTS.map((c) => schema.lit(c))),
+      props: schema.map(schema.unknown()),
     }),
     enums: { component: NEWS_COMPONENTS },
     example: {
@@ -94,10 +53,9 @@ export function presentNews(deps: Deps, imageTask: Task<ImageInput, any, any, ob
       },
     },
     replay: "safe",
-    execute: async (args, api, ctx) => {
+    execute: async (args, api) => {
       const prior = deps.store.news.cardByToolCall(String(api.taskId));
       if (prior) {
-        await startImage(api, ctx, imageTask, prior, deps);
         return toolText(`Presented card ${prior.id} (${prior.component}, ${scoreLine(prior)}).`, {
           cardId: prior.id,
         });
@@ -134,8 +92,15 @@ export function presentNews(deps: Deps, imageTask: Task<ImageInput, any, any, ob
             "Call research_items for this item. It will recheck the possible matches after findings arrive. If evidence remains inconclusive, keep the item separate.",
           ],
         );
-      const hfs = hfsOf(deps, item);
+      const hfs = deps.config.provider === "faux" ? hfsOf(deps, item) : undefined;
       const attention = hfs ? deps.judge.attention(hfs, item.relevance ?? 0.5) : item.attention;
+      if (
+        deps.config.provider !== "faux" &&
+        ["signal_alert", "hype_watch", "fact_check"].includes(args.component)
+      )
+        return toolError(
+          "Use brief, headline, release, thread_pulse or quote; HFS components are retained only for test fixtures.",
+        );
       const problem = checkComponent({
         component: args.component,
         props: args.props,
@@ -146,11 +111,7 @@ export function presentNews(deps: Deps, imageTask: Task<ImageInput, any, any, ob
       if (problem) return toolError(`present_news failed: ${problem}`);
       // The feed orders news by publish date: an item without one gets it from its page first.
       if (!item.publishedAt && !item.dateSource) await deps.dates.resolve(item);
-      const title = String(args.props.title ?? args.props.name ?? args.props.claim ?? item.title);
-      const summary = String(
-        args.props.summary ?? args.props.dek ?? args.props.why ?? item.excerpt ?? "",
-      );
-      const imageId = await imageFor(deps, item, title, summary);
+      const imageId = await deps.images.resolve(item);
       const { card } = deps.store.news.addCard({
         kind: "news",
         component: args.component,
@@ -163,7 +124,6 @@ export function presentNews(deps: Deps, imageTask: Task<ImageInput, any, any, ob
         conversationId: api.conversationId as number,
         sweepId: item.sweepId,
       });
-      await startImage(api, ctx, imageTask, card, deps);
       const sweep = item.sweepId ? deps.store.sweeps.get(item.sweepId) : undefined;
       // A count, not an increment: a replayed call after a restart must not count its card twice.
       if (sweep)
@@ -194,10 +154,10 @@ export function presentTimeline(deps: Deps) {
       "Text: the timeline id and title, then each item with its place in date order (#12 1/3, #15 2/3).",
     description:
       "Link presented news cards about one evolving story into a timeline the reader can open, ordered by publish date. Present every item with present_news first. A new timeline needs a short title and 2 or more items. To add items to an existing timeline from TIMELINES, give its timeline_id.",
-    parameters: Type.Object({
-      item_ids: Type.Array(Type.Integer(), { minItems: 1, maxItems: 8 }),
-      title: Type.Optional(Type.String({ maxLength: 80 })),
-      timeline_id: Type.Optional(Type.Integer()),
+    parameters: schema.obj({
+      item_ids: schema.arr(schema.int(), { minItems: 1, maxItems: 8 }),
+      title: schema.opt(schema.str({ maxLength: 80 })),
+      timeline_id: schema.opt(schema.int()),
     }),
     example: { item_ids: [12, 15], title: "Codex goes always on" },
     replay: "safe",

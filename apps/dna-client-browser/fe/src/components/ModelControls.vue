@@ -7,6 +7,7 @@ import { agentState, api, attempt, feed, info, ui } from "../client/store";
 
 const LEVELS = ["off", "minimal", "low", "medium", "high"] as const;
 const DEEP_LEVELS = [...LEVELS, "xhigh"] as const;
+const ROLES = ["research", "coverage", "summary"] as const;
 const DEEP_COUNTS = [1, 2, 3, 4, 5];
 const model = computed(() => info.value?.models.find((m) => m.id === agentState.value?.model));
 async function configure(body: Parameters<typeof api.configure>[0]) {
@@ -26,7 +27,7 @@ const setThinking = (level: string) =>
       aria-label="Choose a model"
       @click="ui.models = true"
     >
-      <img v-if="model" :src="`/icons/${model.icon}`" alt="" />
+      <img v-if="model?.icon" :src="`/icons/${model.icon}`" alt="" />
       <span>{{ model?.name ?? agentState?.model ?? "Model" }}</span>
       <ChevronDown :size="14" />
     </button>
@@ -112,4 +113,14 @@ const setThinking = (level: string) =>
       </select>
     </label>
   </div>
+  <label v-for="role in ROLES" :key="role" class="model-row quick" data-cap="agent.model">
+    <span class="control-label">{{ role }}</span>
+    <select
+      :aria-label="`${role} model`"
+      :value="agentState?.roles?.[role]"
+      @change="configure({ [`${role}Model`]: ($event.target as HTMLSelectElement).value })"
+    >
+      <option v-for="m in info?.models ?? []" :key="m.id" :value="m.id">{{ m.name }}</option>
+    </select>
+  </label>
 </template>

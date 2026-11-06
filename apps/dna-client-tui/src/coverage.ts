@@ -3,6 +3,8 @@
 import type { CapabilityId } from "@dna/sdk";
 
 export const TUI_COMMANDS: Record<CapabilityId, string> = {
+  "feedback.calibrate": "/calibrate",
+  bookmarks: "/bookmarks",
   status: "/status",
   "feed.read": "/feed",
   "feed.search": "/search",

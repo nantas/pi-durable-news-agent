@@ -25,7 +25,7 @@ dev *ARGS:
 # Run on the faux model, fixture jev and fixture sources (free, offline)
 faux *ARGS:
     @{{ free-port }} {{ port }}
-    DNA_PROVIDER=faux DNA_SEARCH_MODE=fixture DNA_DATA_DIR=${DNA_DATA_DIR:-/tmp/dna-faux} NODE_NO_WARNINGS=1 npx tsx src/main.ts "$@"
+    DNA_PROVIDER=faux JEV_BACKEND=fixture DNA_WIKI_DIR= DNA_MODEL=faux-haiku DNA_RESEARCH_MODEL=faux-haiku DNA_QUICK_MODEL=anthropic/claude-haiku-5.5 DNA_COVERAGE_MODEL=faux-haiku DNA_DEEP_RESEARCH_MODEL=anthropic/claude-haiku-5.5 DNA_SUMMARY_MODEL=faux-haiku DNA_SEARCH_MODE=fixture DNA_DATA_DIR=${DNA_DATA_DIR:-/tmp/dna-faux} NODE_NO_WARNINGS=1 npx tsx src/main.ts "$@"
 
 # Write client and cron tokens into .env (prints names only; --rotate replaces both)
 tokens *ARGS:

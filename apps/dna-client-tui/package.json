@@ -14,6 +14,6 @@
   "dependencies": {
     "@dna/durable-agent": "*",
     "@dna/sdk": "*",
-    "@earendil-works/pi-tui": "1.1.0"
+    "@earendil-works/pi-tui": "1.5.0"
   }
 }

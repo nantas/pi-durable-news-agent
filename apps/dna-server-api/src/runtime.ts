@@ -8,6 +8,7 @@ import { JevClient, type Decide } from "@dna/jev";
 import type { CompactionState } from "@dna/sdk";
 import {
   createModelCatalog,
+  openPiModelCatalog,
   DEFAULT_POINTS,
   fit,
   fits,
@@ -19,16 +20,19 @@ import {
   type DurableHarness,
 } from "@dna/durable-agent";
 import { createLogger, type Logger } from "@dna/sdk/node";
+import { ensureAssessmentBatch } from "./news/assessment-task.ts";
 import { createAgents, type Agents } from "./agents/index.ts";
 import { fauxRules } from "./agents/faux-script.ts";
 import type { Config } from "./config.ts";
 import { openStore } from "./db/store.ts";
 import type { Deps } from "./deps.ts";
 import { Bus } from "./events.ts";
+import { runCommand } from "./news/commands.ts";
 import { Dates } from "./news/dates.ts";
-import { fixtureDecide, fixtureHttp } from "./news/fixtures.ts";
+import { fixtureCommand, fixtureDecide, fixtureHttp } from "./news/fixtures.ts";
 import { Judge } from "./news/hfs.ts";
 import { liveHttp } from "./news/http.ts";
+import { deepResearchSetting } from "./news/deep-research.ts";
 import { Images } from "./news/images.ts";
 import { Quick } from "./news/quick.ts";
 import { Schedule } from "./news/schedule.ts";
@@ -67,15 +71,44 @@ function decideFor(config: Config): Decide {
 export async function openApp(config: Config, options: { log?: Logger } = {}): Promise<App> {
   mkdirSync(config.dataDir, { recursive: true });
   const log = options.log ?? createLogger("api").child({ device: config.device });
+  const modelIds = [
+    config.model,
+    config.researchModel,
+    config.quickModel,
+    config.coverageModel,
+    config.deepResearchModel,
+    config.summaryModel,
+  ];
+  if (config.provider !== "faux" && modelIds.some((id) => !id))
+    throw new Error("Configure every model role explicitly in local .env");
+  const catalog =
+    config.provider === "faux"
+      ? createModelCatalog({
+          provider: "faux",
+          installFaux: (models) => installScriptedFaux(models, fauxRules()),
+        })
+      : await openPiModelCatalog(config.model, modelIds);
+  const decide = decideFor(config);
   const store = openStore(config.dataDir, config.configDir);
   const http = config.searchMode === "fixture" ? fixtureHttp() : liveHttp(log);
-  const catalog = createModelCatalog({
-    provider: config.provider,
-    installFaux: (models) => installScriptedFaux(models, fauxRules()),
-    defaultModel: config.provider === "faux" ? undefined : config.model,
-  });
+  const migrateRoles = config.provider === "pi" && !store.settings.get("piRolesInitialized", false);
+  if (migrateRoles) {
+    store.settings.set("quick", {
+      ...store.settings.get("quick", { thinkingLevel: "off" }),
+      model: config.quickModel,
+    });
+    store.settings.set("deepResearch", {
+      ...deepResearchSetting(store),
+      model: config.deepResearchModel,
+    });
+  }
+  if (migrateRoles) {
+    store.settings.set("coverageModel", { model: config.coverageModel, thinkingLevel: "off" });
+    store.settings.set("summaryModel", { model: config.summaryModel, thinkingLevel: "off" });
+    store.settings.set("researchModel", config.researchModel);
+  }
   const judge = new Judge({
-    decide: decideFor(config),
+    decide,
     store,
     log,
     dir: join(config.promptsDir, "jev"),
@@ -92,18 +125,29 @@ export async function openApp(config: Config, options: { log?: Logger } = {}): P
   const images = new Images({
     store,
     http,
-    log,
-    dataDir: config.dataDir,
-    promptsDir: config.promptsDir,
-    model: config.imageModel,
-    openaiKey: config.openaiKey,
-    quality: config.imageQuality,
     offline: config.provider === "faux" || config.searchMode === "fixture",
   });
   const bus = new Bus();
-  const quick = new Quick({ catalog, store, log });
+  const quick = new Quick({ catalog, store, log, model: config.quickModel });
+  const coverage = new Quick({
+    catalog,
+    store,
+    log,
+    model: config.coverageModel,
+    key: "coverageModel",
+    maxTokens: 4096,
+  });
+  const summary = new Quick({
+    catalog,
+    store,
+    log,
+    model: config.summaryModel,
+    key: "summaryModel",
+    maxTokens: 8192,
+  });
   const dates = new Dates({ http, store, log, quick });
   const deps: Deps = {
+    run: config.provider === "faux" ? fixtureCommand : runCommand,
     config,
     log,
     store,
@@ -114,6 +158,8 @@ export async function openApp(config: Config, options: { log?: Logger } = {}): P
     http,
     catalog,
     quick,
+    coverage,
+    summary,
     dates,
     schedule: new Schedule({ store, cronSchedule: config.cronSchedule }),
   };
@@ -137,12 +183,51 @@ export async function openApp(config: Config, options: { log?: Logger } = {}): P
   const main = await harness.harness.root(ctx, {
     agent: { model: catalog.defaultModel, thinkingLevel: "low" },
   });
+  if (migrateRoles) {
+    const { configure } = await import("@earendil-works/pi-durable");
+    const conversations = await harness.harness.commit(async (tx) => {
+      const ids = [];
+      let cursor;
+      do {
+        const page = await tx.scanConversations({}, 100, cursor);
+        ids.push(...page.items.map((item) => item.id));
+        cursor = page.next;
+      } while (cursor !== undefined);
+      return ids;
+    }, ctx);
+    for (const id of conversations) {
+      const conversation = await harness.harness.conversation(id, ctx);
+      if (!conversation) continue;
+      const agent = await conversation.agent(ctx);
+      const names = agent.extensions.map((extension) => extension.name);
+      const model = names.includes("deep-research")
+        ? config.deepResearchModel
+        : names.includes("news-researcher")
+          ? config.researchModel
+          : config.model;
+      await harness.harness.commit((tx) => configure(tx, id, { model: catalog.ref(model) }), ctx);
+    }
+    store.settings.set("piRolesInitialized", true);
+  }
   const mainModel = async () => {
     const agent = await main.agent(ctx);
-    const id = agent.model?.modelId ?? catalog.defaultModel.modelId;
+    const ref = agent.model ?? catalog.defaultModel;
+    const id = catalog.provider === "faux" ? ref.modelId : `${ref.provider}/${ref.modelId}`;
     return { id, window: catalog.info(id)?.contextWindow ?? 1_000_000 };
   };
   window = (await mainModel()).window;
+  if (!fits(window, compaction.points)) {
+    compaction.points = fit(window, compaction.points);
+    store.settings.set("compaction", compaction);
+  }
+  const pendingSweeps = store.db
+    .prepare(`SELECT DISTINCT c.sweep_id AS id FROM cards c JOIN items i ON i.id=c.item_id
+    JOIN assessments a ON a.id=i.current_assessment_id WHERE c.sweep_id IS NOT NULL AND json_extract(a.payload_json, '$.status')='pending'`)
+    .all() as { id: number }[];
+  await harness.harness.commit(async (tx) => {
+    for (const sweep of pendingSweeps)
+      await ensureAssessmentBatch(tx, main.id, sweep.id, agents.assessmentTask);
+  }, ctx);
   harness.harness.resume();
 
   const stallTimer = setInterval(() => {

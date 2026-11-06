@@ -177,22 +177,25 @@ export function startProjector(
       }
     }
   };
-  const unsubscribe = harness.subscribeCommits((publication) => {
-    const relevant = publication.changes.filter(
-      (c) =>
-        c.type === "conversation" ||
-        c.type === "entry" ||
-        c.type === "task" ||
-        c.type === "submission",
-    );
-    queue.push(...relevant.sort((a, b) => rank(a) - rank(b)));
-    if (!scheduled && queue.length) {
-      scheduled = true;
-      setImmediate(drain);
-    }
+  const observation = harness.observeCommits({
+    advance: (publication) => {
+      const relevant = publication.changes.filter(
+        (c) =>
+          c.type === "conversation" ||
+          c.type === "entry" ||
+          c.type === "task" ||
+          c.type === "submission",
+      );
+      queue.push(...relevant.sort((a, b) => rank(a) - rank(b)));
+      if (!scheduled && queue.length) {
+        scheduled = true;
+        setImmediate(drain);
+      }
+    },
+    end: () => {},
   });
   return () => {
-    unsubscribe();
+    observation.detach();
     drain();
   };
 }

@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import * as schema from "@earendil-works/pi-schema";
 import type { Task } from "@earendil-works/pi-durable";
 import { defineAppTool, onceInCommit, toolError, toolText } from "@dna/durable-agent";
 import type { Deps } from "../../deps.ts";
@@ -11,8 +11,8 @@ export function runNewsSweep(deps: Deps, sweepTask: Task<SweepInput, any, SweepR
       "Text: the phase counts (gathered, kept, duplicates) and one line per ranked candidate, or that nothing cleared the gate.",
     description:
       "Run the checkpointed sweep for a sweep id: gather every due source and topic search, gate each item with jev, dedupe, rank. Returns the ranked candidates. Call it once per scheduled sweep.",
-    parameters: Type.Object({
-      sweep_id: Type.Integer({ description: "The SWEEP_ID from the sweep prompt" }),
+    parameters: schema.obj({
+      sweep_id: schema.int({ description: "The SWEEP_ID from the sweep prompt" }),
     }),
     replay: "safe",
     execute: async (args, api, ctx) => {

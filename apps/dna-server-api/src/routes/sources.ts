@@ -4,6 +4,8 @@ import { int, invalid, notFound } from "../errors.ts";
 import { bodyOf, bool, num, oneOf, str, type Handlers, type RouteDeps } from "./types.ts";
 
 const KINDS: readonly SourceKind[] = [
+  "youtube_channel",
+  "github_topic",
   "rss",
   "atom",
   "hn_front",
@@ -23,7 +25,8 @@ export function sourceRoutes({
       const kind = oneOf(body.kind, "kind", KINDS)!;
       const url = str(body, "url", { max: 500, optional: true });
       if (url && !url.startsWith("https://")) throw invalid("url must start with https://");
-      if (kind !== "hn_front" && kind !== "hn_search" && !url) throw invalid(`${kind} needs a url`);
+      if (kind !== "hn_front" && kind !== "hn_search" && kind !== "github_topic" && !url)
+        throw invalid(`${kind} needs a url`);
       const source = store.sources.add({
         kind,
         name: str(body, "name", { max: 80 }),

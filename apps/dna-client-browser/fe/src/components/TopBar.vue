@@ -43,6 +43,7 @@ const spend = computed(() => agentState.value?.spend);
 
 <template>
   <header class="topbar">
+    <button data-cap="bookmarks" @click="ui.bookmarks = true">待收藏列表</button>
     <div class="brand">
       <span class="brand-mark" aria-hidden="true"><Zap :size="17" /></span>
       <div>
@@ -96,12 +97,14 @@ const spend = computed(() => agentState.value?.spend);
         data-cap="usage"
         :title="
           spend
-            ? `Total spend: model ${usd(spend.modelUsd)}, jev ${usd(spend.jevUsd)}, images ${usd(spend.imageUsd)}`
+            ? `Total spend: model ${spend.modelCostUnknown ? 'unknown (billing unverified)' : usd(spend.modelUsd)}, jev ${usd(spend.jevUsd)}, images ${usd(spend.imageUsd)}`
             : 'Total spend'
         "
         @click="go('/executions/usage')"
       >
-        <Coins :size="15" />{{ usd(spend?.totalUsd ?? 0) }}
+        <Coins :size="15" />{{
+          spend?.modelCostUnknown ? "Cost unknown" : usd(spend?.totalUsd ?? 0)
+        }}
       </button>
       <span class="stat device" :title="`Device ${info?.device ?? ''}`" data-testid="device"
         ><Server :size="15" />{{ info?.deviceName ?? info?.device ?? "device" }}</span

@@ -1,7 +1,7 @@
-// The model catalog: Haiku 5.5 (default) plus 29 more models, all through OpenRouter.
-// DNA_PROVIDER=faux swaps in a free deterministic model with the same 1M window.
+// Production exposes only explicitly configured Pi models. The legacy catalog is an offline fixture.
 import { createModels, type MutableModels } from "@earendil-works/pi-ai/models";
-import { openrouterProvider } from "@earendil-works/pi-ai/providers/openrouter";
+import { ModelRuntime } from "@earendil-works/pi-coding-agent";
+import type { Models } from "@earendil-works/pi-ai";
 import type { ModelRef } from "@earendil-works/pi-durable";
 
 export interface CatalogEntry {
@@ -15,6 +15,7 @@ export interface ModelInfo extends CatalogEntry {
   provider: string;
   contextWindow: number;
   reasoning: boolean;
+  billingUnknown?: boolean;
   cost: { input: number; output: number };
 }
 
@@ -76,8 +77,8 @@ export const CATALOG: readonly CatalogEntry[] = [
 ];
 
 export interface ModelCatalog {
-  readonly models: MutableModels;
-  readonly provider: "openrouter" | "faux";
+  readonly models: Models;
+  readonly provider: "pi" | "faux";
   readonly defaultModel: ModelRef;
   list(): ModelInfo[];
   /** A catalog id to a pi-durable model reference; throws for ids outside the catalog. */
@@ -86,9 +87,11 @@ export interface ModelCatalog {
 }
 
 export function createModelCatalog(options: {
-  provider: "openrouter" | "faux";
+  provider: "pi" | "faux";
   installFaux?: (models: MutableModels) => void;
   defaultModel?: string;
+  runtime?: Models;
+  modelIds?: string[];
 }): ModelCatalog {
   const models = createModels();
   if (options.provider === "faux") {
@@ -119,34 +122,55 @@ export function createModelCatalog(options: {
       info: (id) => all.find((m) => m.id === id),
     };
   }
-  const provider = openrouterProvider();
-  models.setProvider(provider);
-  const known = provider.getModels();
-  const missing = CATALOG.filter((c) => !known.some((m) => m.id === c.id)).map((c) => c.id);
-  if (missing.length) throw new Error(`OpenRouter catalog is missing: ${missing.join(", ")}`);
-  const list = () =>
-    CATALOG.map((c) => {
-      const m = known.find((x) => x.id === c.id)!;
+  const runtime = options.runtime;
+  if (!runtime || !options.defaultModel || !options.modelIds?.length)
+    throw new Error("Pi runtime and explicit role models are required");
+  const ref = (id: string): ModelRef => {
+    const slash = id.indexOf("/");
+    if (slash < 1 || !options.modelIds!.includes(id))
+      throw new Error(`Unknown model ${id}; configure an explicit provider/modelId`);
+    const provider = id.slice(0, slash);
+    const modelId = id.slice(slash + 1);
+    if (!runtime.getModel(provider, modelId)) throw new Error(`Pi model ${id} is not registered`);
+    return { provider, modelId };
+  };
+  const list = (): ModelInfo[] =>
+    [...new Set(options.modelIds)].map((id) => {
+      const selected = ref(id);
+      const model = runtime.getModel(selected.provider, selected.modelId)!;
       return {
-        ...c,
-        provider: "openrouter",
-        contextWindow: m.contextWindow,
-        reasoning: m.reasoning,
-        cost: { input: m.cost.input, output: m.cost.output },
+        id,
+        name: model.name,
+        tier: "",
+        icon: "",
+        provider: selected.provider,
+        contextWindow: model.contextWindow,
+        reasoning: model.reasoning,
+        // SDK catalog prices do not establish actual billing, including API-key subscriptions.
+        billingUnknown: runtime instanceof ModelRuntime,
+        cost: { input: model.cost.input, output: model.cost.output },
       };
     });
-  const defaultId = options.defaultModel ?? DEFAULT_MODEL;
-  const ref = (id: string): ModelRef => {
-    if (!CATALOG.some((c) => c.id === id))
-      throw new Error(`Unknown model ${id}. Pick one of the ${CATALOG.length} catalog models.`);
-    return { provider: "openrouter", modelId: id };
-  };
   return {
-    models,
-    provider: "openrouter",
-    defaultModel: ref(defaultId),
-    list,
+    models: runtime,
+    provider: "pi",
+    defaultModel: ref(options.defaultModel),
     ref,
-    info: (id) => list().find((m) => m.id === id),
+    list,
+    info: (id) => list().find((model) => model.id === id),
   };
+}
+
+export async function openPiModelCatalog(
+  defaultModel: string,
+  modelIds: string[],
+): Promise<ModelCatalog> {
+  const runtime = await ModelRuntime.create({ allowModelNetwork: false });
+  const catalog = createModelCatalog({ provider: "pi", defaultModel, modelIds, runtime });
+  for (const id of modelIds) {
+    const ref = catalog.ref(id);
+    if (!runtime.hasConfiguredAuth(ref.provider))
+      throw new Error(`Pi login is required for ${ref.provider}`);
+  }
+  return catalog;
 }

@@ -7,14 +7,14 @@ export async function agentState(app: App): Promise<AgentState> {
   const { harness, ctx } = app.harness;
   const agent = await app.main.agent(ctx);
   const model = await app.mainModel();
-  const graph = await harness.taskGraph(ctx);
+  const graph = await harness.observeTaskGraph({ advance: () => {}, end: () => {} }, ctx);
   let busy: boolean;
   try {
     busy = Object.values(graph.value.tasks).some(
       (t) => (t.conversationId as number) === (app.main.id as number) && !t.background,
     );
   } finally {
-    graph.dispose();
+    graph.detach();
   }
   const total = sumUsage(JSON.parse(JSON.stringify(await harness.usage(ctx))));
   return {
@@ -22,7 +22,12 @@ export async function agentState(app: App): Promise<AgentState> {
     model: model.id,
     thinkingLevel: agent.thinkingLevel ?? "low",
     quick: app.quick.setting(),
-    deepResearch: deepResearchSetting(app.store),
+    deepResearch: deepResearchSetting(app.store, app.config.deepResearchModel),
+    roles: {
+      research: app.store.settings.get("researchModel", app.config.researchModel),
+      coverage: app.coverage.setting().model,
+      summary: app.summary.setting().model,
+    },
     busy,
     contextTokens: app.store.telemetry.contextTokens(app.main.id as number),
     contextWindow: model.window,
@@ -35,7 +40,10 @@ export async function agentState(app: App): Promise<AgentState> {
       cacheRead: total.cacheRead,
       cacheWrite: total.cacheWrite,
     },
-    spend: app.store.telemetry.spend(),
+    spend: {
+      ...app.store.telemetry.spend(),
+      modelCostUnknown: app.catalog.list().some((model) => model.billingUnknown),
+    },
     lastActivityAt: app.store.telemetry.lastActivityAt(),
     nextSweepAt: app.schedule.next()?.toISOString(),
     schedule: app.schedule.state(),

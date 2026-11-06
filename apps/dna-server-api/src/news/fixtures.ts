@@ -239,3 +239,9 @@ export function fixtureDecide(): Decide {
     } as SystemOneResult;
   };
 }
+
+export async function fixtureCommand(command: string): Promise<string> {
+  if (command === "gh") return JSON.stringify({ items: [] });
+  if (command === "yt-dlp") return JSON.stringify({ entries: [] });
+  throw new Error(`No command fixture for ${command}`);
+}

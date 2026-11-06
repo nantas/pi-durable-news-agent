@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import { Type } from "@earendil-works/pi-ai";
+import * as schema from "@earendil-works/pi-schema";
 import type { AgentChange } from "@earendil-works/pi-durable";
 import { defineAppTool, loadPrompt, spawnSubagents, toolError, toolText } from "@dna/durable-agent";
 import { StoryMatcher } from "../../news/stories.ts";
@@ -14,13 +14,13 @@ export function researchItems(deps: Deps, child: () => AgentChange) {
     returns:
       "Text: each batch's findings per item from its news-researcher subagent, and any researcher that did not finish.",
     description: `Send up to ${MAX_BATCHES} batches of up to ${MAX_PER_BATCH} item ids to news-researcher subagents that run in parallel. Each verifies claims with jev and reports findings. Returns one short finding per item.`,
-    parameters: Type.Object({
-      sweep_id: Type.Integer(),
-      batches: Type.Array(
-        Type.Object({
-          item_ids: Type.Array(Type.Integer(), { minItems: 1, maxItems: MAX_PER_BATCH }),
-          focus: Type.Optional(
-            Type.String({ description: "What to check, for example versions and availability" }),
+    parameters: schema.obj({
+      sweep_id: schema.int(),
+      batches: schema.arr(
+        schema.obj({
+          item_ids: schema.arr(schema.int(), { minItems: 1, maxItems: MAX_PER_BATCH }),
+          focus: schema.opt(
+            schema.str({ description: "What to check, for example versions and availability" }),
           ),
         }),
         { minItems: 1, maxItems: MAX_BATCHES },

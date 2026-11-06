@@ -1,4 +1,4 @@
-// Client-side feed reducer: news cards (oldest first), sweeps, open taste questions, agent state and usage, from
+// Client-side feed reducer: news cards (REST ranking, stable during SSE updates), sweeps, open taste questions, agent state and usage, from
 // the REST snapshot plus feed.*, sweep, taste.question, agent.state and usage frames. Timelines are views over the
 // news cards that share a timeline id.
 import type { AgentState, Card, Frame, Sweep, TasteQuestion, UsageDay } from "./api.ts";
@@ -25,7 +25,13 @@ export class FeedModel extends Emitter {
     questions?: TasteQuestion[];
     agent?: AgentState;
   }) {
-    for (const c of data.cards ?? []) this.cards.set(c.id, c);
+    if (data.cards) {
+      const incoming = new Set(data.cards.map((card) => card.id));
+      this.cards = new Map([
+        ...data.cards.map((card) => [card.id, card] as const),
+        ...[...this.cards].filter(([id]) => !incoming.has(id)),
+      ]);
+    }
     for (const s of data.sweeps ?? []) this.sweeps.set(s.id, s);
     for (const q of data.questions ?? []) this.questions.set(q.id, q);
     if (data.agent) this.state.agent = data.agent;
@@ -78,7 +84,7 @@ export class FeedModel extends Emitter {
   }
 
   private rebuild() {
-    const cards = [...this.cards.values()].sort((a, b) => a.id - b.id);
+    const cards = [...this.cards.values()];
     this.state = {
       ...this.state,
       news: cards.filter((c) => c.kind === "news" && !c.hiddenFromFeed),

@@ -3,7 +3,7 @@
 // agent.state and usage. Pings every 15 s and ends at 2 MB buffered so a slow viewer reconnects to a fresh snapshot.
 // Streams are viewers only: closing one never aborts work.
 import type { Request, Response } from "express";
-import { watchEvents, type ConversationId } from "@earendil-works/pi-durable";
+import { type ConversationId } from "@earendil-works/pi-durable";
 import { API_VERSION, type Frame } from "@dna/sdk";
 import { agentState } from "./agent-state.ts";
 import { invalid } from "./errors.ts";
@@ -145,19 +145,41 @@ export class StreamHub {
     for (const id of ids) {
       if (sse.closed) return;
       if (!(await harness.conversation(id as ConversationId, ctx))) continue;
-      const stream = await watchEvents(harness, id as ConversationId, ctx);
-      sse.send({
-        type: "agent.snapshot",
-        conversationId: id,
-        snapshot: JSON.parse(JSON.stringify(stream.snapshot)),
-      });
-      stream.start(async (events) => {
-        if (!sse.closed)
-          sse.send({
-            type: "agent.batch",
-            conversationId: id,
-            events: JSON.parse(JSON.stringify(events)),
-          });
+      const conversation = await harness.conversation(id as ConversationId, ctx);
+      if (!conversation) continue;
+      const stream = await conversation.watch(ctx, { min: 1000, max: 2000 });
+      const snapshot = (value: typeof stream.value) => {
+        const view = JSON.parse(JSON.stringify(value));
+        const live = view.docs["pi.live"] ?? {};
+        return {
+          type: "snapshot" as const,
+          entries: view.entries,
+          run: live.run,
+          generation: live.generation,
+          tools: live.tools ?? [],
+          compactions: (live.compactions ?? []).map((c: { trigger: string }) => ({
+            ...c,
+            reason: c.trigger,
+          })),
+          inbox: (view.docs["pi.inbox"]?.items ?? []).map(
+            (item: { id: number; whenBusy?: string }) => ({
+              id: item.id,
+              mode: item.whenBusy ?? "followUp",
+            }),
+          ),
+          agent: view.docs["pi.agent"] ?? {},
+          usage: view.docs["pi.usage"] ?? { models: {}, tools: {} },
+        };
+      };
+      sse.send({ type: "agent.snapshot", conversationId: id, snapshot: snapshot(stream.value) });
+      // shortcut: bounded full snapshots preserve the wire protocol; use view deltas for large transcripts.
+      stream.start(async (call) => {
+        if (call.kind === "failed") {
+          sse.close();
+          return;
+        }
+        if (call.kind === "value" && !sse.closed)
+          sse.send({ type: "agent.batch", conversationId: id, events: [snapshot(call.value)] });
       });
       sse.onClose(() => void stream.stop());
     }
@@ -176,7 +198,8 @@ export class StreamHub {
       500,
       onError,
     );
-    sse.onClose(harness.subscribeCommits(() => state()));
+    const observation = harness.observeCommits({ advance: () => state(), end: () => {} });
+    sse.onClose(() => observation.detach());
     sse.onClose(() => state.cancel());
     await state.now();
   }

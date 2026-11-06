@@ -28,7 +28,7 @@ export function feedRoutes({
     feed: (req, res) => {
       const limit = Math.min(int(req.query.limit, "limit", 50), 1000);
       const items = store.news.cards({ before: optInt(req.query.before, "before"), limit });
-      res.json({ items, cursor: items.length === limit ? String(items[0].id) : undefined });
+      res.json({ items, cursor: items.length === limit ? String(items.at(-1)!.id) : undefined });
     },
     "feed.search": (req, res) => {
       const q = str(req.query as Record<string, unknown>, "q", { max: 200 });

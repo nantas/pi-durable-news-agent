@@ -10,7 +10,7 @@ Bare jev: JSON in, decisions out. The jev core
 ```ts
 import { JevClient, JevLedger, loadCommand, rankHfs, runCommand } from "@dna/jev";
 
-const client = new JevClient(); // OPENROUTER_API_KEY, or JEV_BACKEND=mock
+const client = new JevClient({ provider: "typesafe", model: "jev-latest" }); // TYPESAFE_API_KEY; independent of Pi login
 const ledger = new JevLedger((call) => save(call)); // persist every call
 const hfs = loadCommand("hfs", "prompt_engineering/jev");
 

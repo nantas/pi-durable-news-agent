@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import * as schema from "@earendil-works/pi-schema";
 import { defineAppTool, toolError, toolText } from "@dna/durable-agent";
 import type { Deps } from "../../deps.ts";
 import { ref } from "./shared.ts";
@@ -11,12 +11,12 @@ export function reportFindings(deps: Deps) {
     returns: "Text: that the findings were saved, with how many claims jev found supported.",
     description:
       "Save your findings for one item: a one sentence summary, up to four claims, evidence urls, and actionability. Claims are checked against the item text with jev claim-support unless you already did.",
-    parameters: Type.Object({
-      item_id: Type.Integer(),
-      summary: Type.String({ minLength: 10, maxLength: 600 }),
-      claims: Type.Array(Type.String(), { maxItems: 4 }),
-      evidence_urls: Type.Array(Type.String(), { maxItems: 6 }),
-      actionability: Type.Union(ACTIONABILITY.map((a) => Type.Literal(a))),
+    parameters: schema.obj({
+      item_id: schema.int(),
+      summary: schema.str({ minLength: 10, maxLength: 600 }),
+      claims: schema.arr(schema.str(), { maxItems: 4 }),
+      evidence_urls: schema.arr(schema.str(), { maxItems: 6 }),
+      actionability: schema.union(ACTIONABILITY.map((a) => schema.lit(a))),
     }),
     enums: { actionability: ACTIONABILITY },
     example: {

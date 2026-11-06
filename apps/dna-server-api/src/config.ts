@@ -14,7 +14,8 @@ export interface Config {
   rootDir: string;
   configDir: string;
   promptsDir: string;
-  provider: "openrouter" | "faux";
+  wikiDir?: string;
+  provider: "pi" | "faux";
   jevBackend: "auto" | "fixture" | "mock" | "openrouter" | "typesafe";
   /** auto | web | fallback | firecrawl | fixture; SearchService warns on anything else and searches the web. */
   searchMode: string;
@@ -27,9 +28,10 @@ export interface Config {
   maxSavedSources: number;
   model: string;
   researchModel: string;
-  imageModel: string;
-  imageQuality: string;
-  openaiKey?: string;
+  quickModel: string;
+  coverageModel: string;
+  deepResearchModel: string;
+  summaryModel: string;
   cronSchedule: string;
   clientToken: string;
   cronToken: string;
@@ -54,7 +56,7 @@ export function loadConfig(argv = process.argv.slice(2), env = process.env): Con
     strict: false,
   });
   const rootDir = repoRoot();
-  const provider = env.DNA_PROVIDER === "faux" ? "faux" : "openrouter";
+  const provider = env.DNA_PROVIDER === "faux" ? "faux" : "pi";
   const searchMode = env.DNA_SEARCH_MODE?.trim() || "auto";
   const config: Config = {
     device: String(values.device ?? env.DNA_DEVICE_NAME ?? "local"),
@@ -66,20 +68,24 @@ export function loadConfig(argv = process.argv.slice(2), env = process.env): Con
     rootDir,
     configDir: join(APP_DIR, "config"),
     promptsDir: join(APP_DIR, "prompt_engineering"),
+    wikiDir: env.DNA_WIKI_DIR?.trim() ? resolve(env.DNA_WIKI_DIR.trim()) : undefined,
     provider,
     jevBackend:
-      (env.JEV_BACKEND as Config["jevBackend"]) ?? (searchMode === "fixture" ? "fixture" : "auto"),
+      (env.JEV_BACKEND as Config["jevBackend"]) ??
+      (searchMode === "fixture" ? "fixture" : "typesafe"),
     searchMode,
     firecrawlKey: env.FIRECRAWL_API_KEY?.trim() || undefined,
     sweepCredits: int(env.DNA_FIRECRAWL_SWEEP_CREDITS, 5),
     dailyCredits: int(env.DNA_FIRECRAWL_DAILY_CREDITS, 40),
     sweepQueries: int(env.DNA_SWEEP_QUERIES, 15),
     maxSavedSources: int(env.DNA_MAX_SAVED_SOURCES, 25),
-    model: env.DNA_MODEL ?? "anthropic/claude-haiku-5.5",
-    researchModel: env.DNA_RESEARCH_MODEL ?? env.DNA_MODEL ?? "anthropic/claude-haiku-5.5",
-    imageModel: env.DNA_IMAGE_MODEL ?? "gpt-image-2.5-flare",
-    imageQuality: env.DNA_IMAGE_QUALITY ?? "low",
-    openaiKey: env.OPENAI_API_KEY?.trim() || undefined,
+    model: env.DNA_MODEL ?? (provider === "faux" ? "faux-haiku" : ""),
+    researchModel: env.DNA_RESEARCH_MODEL ?? (provider === "faux" ? "faux-haiku" : ""),
+    quickModel: env.DNA_QUICK_MODEL ?? (provider === "faux" ? "anthropic/claude-haiku-5.5" : ""),
+    coverageModel: env.DNA_COVERAGE_MODEL ?? (provider === "faux" ? "faux-haiku" : ""),
+    deepResearchModel:
+      env.DNA_DEEP_RESEARCH_MODEL ?? (provider === "faux" ? "anthropic/claude-haiku-5.5" : ""),
+    summaryModel: env.DNA_SUMMARY_MODEL ?? (provider === "faux" ? "faux-haiku" : ""),
     cronSchedule: env.DNA_CRON_SCHEDULE ?? "* * * * *",
     clientToken: env.DNA_CLIENT_TOKEN?.trim() ?? "",
     cronToken: env.DNA_CRON_TOKEN?.trim() ?? "",

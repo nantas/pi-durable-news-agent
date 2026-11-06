@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import * as schema from "@earendil-works/pi-schema";
 import { defineAppTool, toolText } from "@dna/durable-agent";
 import type { Deps } from "../../deps.ts";
 import { sourceLine } from "./reader.ts";
@@ -10,7 +10,7 @@ export function readTaste(deps: Deps) {
       "Text: the reader's keywords and weights by section (topic, signal, facts, hype), their sources with ids and weights, and their recent feedback.",
     description:
       "The reader's taste: topic keywords and section keywords with weights (0.1 to 2.0), sources with ids and weights (0.1 to 2.0), and their recent Show me more, Show me less and Hype, Facts, Signal labels.",
-    parameters: Type.Object({}),
+    parameters: schema.obj({}),
     replay: "safe",
     execute: async () => {
       const group = (kind: "topic" | "hype" | "facts" | "signal") =>

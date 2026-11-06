@@ -1,0 +1,71 @@
+{
+  "name": "incremental",
+  "version": 2,
+  "description": "基于覆盖证据的增量评估",
+  "model": "~typesafe/jev-latest",
+  "state": {
+    "material": "{{material}}",
+    "claims": "{{claims}}",
+    "coverage": "{{coverage}}",
+    "calibrationExamples": "{{calibrationExamples}}"
+  },
+  "questions": {
+    "design_applies": {
+      "type": "noul",
+      "instructions": "材料是否适用于游戏设计方法？三类独立判断。"
+    },
+    "design_novelty": {
+      "type": "score",
+      "instructions": "基于固定覆盖证据，材料在游戏设计方法上相对已消化知识带来多少新增？Bookmark不等于已覆盖。",
+      "criteria": ["没有新增", "少量新增", "明显新增", "重大新增"]
+    },
+    "design_value": {
+      "type": "score",
+      "instructions": "材料在游戏设计方法上对长期游戏创作的价值是多少？热度不是价值。",
+      "criteria": ["无创作价值", "有限参考", "可复用", "关键贡献"]
+    },
+    "tools_applies": {
+      "type": "noul",
+      "instructions": "材料是否适用于创作与生产工具？三类独立判断。"
+    },
+    "tools_novelty": {
+      "type": "score",
+      "instructions": "基于固定覆盖证据，材料在创作与生产工具上相对已消化知识带来多少新增？Bookmark不等于已覆盖。",
+      "criteria": ["没有新增", "少量新增", "明显新增", "重大新增"]
+    },
+    "tools_value": {
+      "type": "score",
+      "instructions": "材料在创作与生产工具上对长期游戏创作的价值是多少？热度不是价值。",
+      "criteria": ["无创作价值", "有限参考", "可复用", "关键贡献"]
+    },
+    "reference_applies": {
+      "type": "noul",
+      "instructions": "材料是否适用于内容参考与储备？三类独立判断。"
+    },
+    "reference_novelty": {
+      "type": "score",
+      "instructions": "基于固定覆盖证据，材料在内容参考与储备上相对已消化知识带来多少新增？Bookmark不等于已覆盖。",
+      "criteria": ["没有新增", "少量新增", "明显新增", "重大新增"]
+    },
+    "reference_value": {
+      "type": "score",
+      "instructions": "材料在内容参考与储备上对长期游戏创作的价值是多少？热度不是价值。",
+      "criteria": ["无创作价值", "有限参考", "可复用", "关键贡献"]
+    },
+    "design_incremental": {
+      "type": "score",
+      "instructions": "独立综合判断材料在游戏设计方法下相对本人的分层覆盖所带来的增量价值。根据新增程度、长期创作价值、适用性及覆盖证据直接给出综合判断，不机械相乘或平均。低置信度保留分值，不把未知当作零。",
+      "criteria": ["没有增量价值", "少量增量价值", "中等增量价值", "较高增量价值", "极高增量价值"]
+    },
+    "tools_incremental": {
+      "type": "score",
+      "instructions": "独立综合判断材料在创作与生产工具下相对本人的分层覆盖所带来的增量价值。根据新增程度、长期创作价值、适用性及覆盖证据直接给出综合判断，不机械相乘或平均。低置信度保留分值，不把未知当作零。",
+      "criteria": ["没有增量价值", "少量增量价值", "中等增量价值", "较高增量价值", "极高增量价值"]
+    },
+    "reference_incremental": {
+      "type": "score",
+      "instructions": "独立综合判断材料在内容参考与储备下相对本人的分层覆盖所带来的增量价值。根据新增程度、长期创作价值、适用性及覆盖证据直接给出综合判断，不机械相乘或平均。低置信度保留分值，不把未知当作零。",
+      "criteria": ["没有增量价值", "少量增量价值", "中等增量价值", "较高增量价值", "极高增量价值"]
+    }
+  }
+}

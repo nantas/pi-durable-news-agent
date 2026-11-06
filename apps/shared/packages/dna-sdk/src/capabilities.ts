@@ -8,8 +8,16 @@ export interface Capability {
 }
 
 export const CAPABILITIES = {
+  "feedback.calibrate": {
+    summary: "Discuss and save explicit scoring corrections with the durable Agent",
+    routes: ["agent.messages"],
+  },
+  bookmarks: {
+    summary: "Save, list, annotate and remove material leads",
+    routes: ["bookmarks.list", "bookmarks.add", "bookmarks.update", "bookmarks.remove"],
+  },
   status: { summary: "Device, model, agent state and next sweep", routes: ["info", "agent.get"] },
-  "feed.read": { summary: "News cards, oldest first", routes: ["feed"] },
+  "feed.read": { summary: "News cards, highest incremental value first", routes: ["feed"] },
   "feed.search": {
     summary: "Search the news by words, a keyword or a url, in its own tab",
     routes: ["feed.search"],

@@ -1,5 +1,7 @@
 // Items, jev classifications, researcher findings, stories, images and the cards the feed renders.
 import type {
+  Assessment,
+  ScoreCorrection,
   Card,
   CardComponent,
   CardImage,
@@ -10,6 +12,9 @@ import type {
   TimelineSummary,
 } from "@dna/sdk";
 import { bind, type Db, nowIso, num, parse, str, tx } from "../db.ts";
+import { SourcesRepo } from "./sources.ts";
+import { TasteRepo } from "./taste.ts";
+import { rankScore, weightsOf } from "../../news/rank.ts";
 import { canonicalUrl, urlHash } from "./sources.ts";
 import { comparePublished, packageRelease } from "../../news/releases.ts";
 
@@ -865,6 +870,62 @@ export class NewsRepo {
     ).map((r) => r.item_id);
   }
 
+  saveAssessment(input: Omit<Assessment, "id">): Assessment {
+    if (input.status === "completed" && (!input.scores || input.confidence === undefined))
+      throw new Error("Completed assessment requires scores and confidence");
+    for (const score of Object.values(input.scores ?? {}))
+      if (!Number.isFinite(score) || score < 0 || score > 100)
+        throw new Error("Assessment score must be between 0 and 100");
+    if (
+      input.confidence !== undefined &&
+      (!Number.isFinite(input.confidence) || input.confidence < 0 || input.confidence > 1)
+    )
+      throw new Error("Assessment confidence must be between 0 and 1");
+    return tx(this.db, () => {
+      const row = this.db
+        .prepare(`INSERT INTO assessments
+        (item_id, command, version, material_hash, coverage_snapshot, payload_json, jev_call_id)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(item_id, command, version, material_hash, coverage_snapshot)
+        DO UPDATE SET payload_json=excluded.payload_json, jev_call_id=excluded.jev_call_id
+        RETURNING id`)
+        .get(
+          input.itemId,
+          input.command,
+          input.version,
+          input.materialHash,
+          input.coverageSnapshot,
+          JSON.stringify(input),
+          input.jevCallId ?? null,
+        ) as { id: number };
+      this.db
+        .prepare("UPDATE items SET current_assessment_id = ? WHERE id = ?")
+        .run(row.id, input.itemId);
+      return { ...input, id: row.id };
+    });
+  }
+
+  assessment(itemId: number): Assessment | undefined {
+    const row = this.db
+      .prepare(`SELECT a.id, a.payload_json FROM items i
+      JOIN assessments a ON a.id = i.current_assessment_id WHERE i.id = ?`)
+      .get(itemId) as { id: number; payload_json: string } | undefined;
+    if (!row) return undefined;
+    const rows = this.db
+      .prepare(
+        "SELECT correction_json FROM feedback WHERE assessment_id = ? AND kind = 'calibration' ORDER BY id",
+      )
+      .all(row.id) as { correction_json: string }[];
+    const correction: ScoreCorrection = {};
+    for (const row of rows) {
+      const next = JSON.parse(row.correction_json).corrected as ScoreCorrection;
+      if (next.scores) correction.scores = { ...correction.scores, ...next.scores };
+      if (next.applies) correction.applies = { ...correction.applies, ...next.applies };
+      if (next.domains) correction.domains = next.domains;
+    }
+    return { ...JSON.parse(row.payload_json), id: row.id, ...(rows.length ? { correction } : {}) };
+  }
+
   // Cards
 
   cardCount(sweepId: number): number {
@@ -953,6 +1014,19 @@ export class NewsRepo {
   }): { card: Card; created: boolean } {
     const existing = this.cardByToolCall(input.toolCallId);
     if (existing) return { card: existing, created: false };
+    if (input.itemId && !this.assessment(input.itemId))
+      this.saveAssessment({
+        itemId: input.itemId,
+        command: "incremental",
+        version: 2001,
+        materialHash: "pending",
+        coverageSnapshot: "pending",
+        status: "pending",
+        readingDepth: "unread",
+        claims: [],
+        evidence: [],
+        queries: [],
+      });
     const r = this.db
       .prepare(
         `INSERT INTO cards (kind, component, item_id, story_id, image_id, props_json, hype, facts, signal, primary_category, labels_json, attention, tool_call_id, conversation_id, sweep_id, created_at)
@@ -997,7 +1071,7 @@ export class NewsRepo {
     const r = this.db
       .prepare(
         `SELECT c.*, i.url AS item_url, i.title AS item_title, i.source_name, i.published_at, i.discussion_url,
-                i.matched_topic,
+                i.matched_topic, i.created_at AS discovered_at,
                 s.title AS story_title,
                 im.id AS im_id, im.origin AS im_origin, im.status AS im_status, im.url AS im_url
          FROM cards c
@@ -1054,8 +1128,10 @@ export class NewsRepo {
       sourceName: str(r.source_name),
       discussionUrl: str(r.discussion_url),
       publishedAt: str(r.published_at),
+      discoveredAt: str(r.discovered_at),
       topic: str(r.matched_topic),
       timeline: r.item_id ? this.timelineOf(r.item_id) : undefined,
+      assessment: r.item_id ? this.assessment(r.item_id) : undefined,
       hfs,
       attention: num(r.attention),
       image: toImage(
@@ -1108,13 +1184,46 @@ export class NewsRepo {
   cards(options: { before?: number; limit?: number } = {}): Card[] {
     const limit = Math.min(options.limit ?? 50, 200);
     const where: string[] = ["c.kind = 'news'", STORY_VISIBLE, RELEASE_VISIBLE];
-    const params: Record<string, unknown> = { limit };
-    if (options.before) {
-      where.push("c.id < :before");
-      params.before = options.before;
-    }
-    const sql = `SELECT c.id FROM cards c WHERE ${where.join(" AND ")} ORDER BY c.id DESC LIMIT :limit`;
-    return (this.db.prepare(sql).all(bind(params)) as any[]).map((r) => this.card(r.id)!).reverse();
+    const weights = { sources: new SourcesRepo(this.db), taste: new TasteRepo(this.db) };
+    const sql = `SELECT c.id FROM cards c WHERE ${where.join(" AND ")} ORDER BY c.id DESC`;
+    // shortcut: Rank cards in memory; move ranking into SQL if history makes refresh slow.
+    const ranked = (this.db.prepare(sql).all() as { id: number }[])
+      .map((r) => {
+        const card = this.card(r.id)!;
+        const assessment = card.assessment;
+        const scores = assessment?.scores
+          ? { ...assessment.scores, ...assessment.correction?.scores }
+          : undefined;
+        const item = card.itemId ? this.item(card.itemId) : undefined;
+        const score =
+          assessment?.status === "completed" && scores && item
+            ? rankScore(
+                Math.max(scores.design, scores.tools, scores.reference) / 100,
+                weightsOf(weights, item),
+                card.publishedAt,
+              )
+            : undefined;
+        return {
+          card,
+          score,
+          discoveredAt: item?.createdAt ?? card.createdAt,
+          relevance: item?.relevance ?? 0,
+        };
+      })
+      .sort((a, b) => {
+        if (a.score !== undefined || b.score !== undefined)
+          return (b.score ?? -1) - (a.score ?? -1) || b.card.id - a.card.id;
+        return (
+          b.discoveredAt.localeCompare(a.discoveredAt) ||
+          b.relevance - a.relevance ||
+          b.card.id - a.card.id
+        );
+      })
+      .map((entry) => entry.card);
+    const position = options.before ? ranked.findIndex((card) => card.id === options.before) : -1;
+    if (options.before && position === -1) return [];
+    const start = position + 1;
+    return ranked.slice(start, start + limit);
   }
 }
 

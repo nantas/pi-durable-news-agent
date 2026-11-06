@@ -32,7 +32,7 @@ export const JEV_COMMANDS = [
   "claim-support",
   "importance",
 ] as const;
-export type JevCommandName = (typeof JEV_COMMANDS)[number];
+export type JevCommandName = (typeof JEV_COMMANDS)[number] | "incremental" | "coverage";
 
 export interface JudgeRef extends CallRef {
   itemId?: number;

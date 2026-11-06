@@ -1,0 +1,11 @@
+CREATE TABLE bookmarks (
+ id INTEGER PRIMARY KEY,
+ item_id INTEGER NOT NULL UNIQUE REFERENCES items(id),
+ card_id INTEGER NOT NULL REFERENCES cards(id),
+ title TEXT NOT NULL,
+ url TEXT NOT NULL,
+ url_hash TEXT NOT NULL UNIQUE,
+ source_name TEXT,
+ note TEXT NOT NULL DEFAULT '',
+ created_at TEXT NOT NULL
+);

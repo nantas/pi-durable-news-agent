@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Type } from "@earendil-works/pi-ai";
+import * as schema from "@earendil-works/pi-schema";
 import { defineExtension } from "@earendil-works/pi-durable";
 import {
   allowOnly,
@@ -17,9 +17,9 @@ const COMPONENTS = ["headline", "brief"] as const;
 const present = defineAppTool({
   name: "present",
   description: "Present a card",
-  parameters: Type.Object({
-    component: Type.Union(COMPONENTS.map((c) => Type.Literal(c))),
-    title: Type.String(),
+  parameters: schema.obj({
+    component: schema.union(COMPONENTS.map((c) => schema.lit(c))),
+    title: schema.str(),
   }),
   enums: { component: COMPONENTS },
   example: { component: "brief", title: "A title" },

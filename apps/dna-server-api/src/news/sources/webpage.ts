@@ -2,7 +2,12 @@
 import { parseHTML } from "linkedom";
 import type { FeedEntry, Fetcher } from "./types.ts";
 
-export function listingLinks(html: string, pageUrl: string, limit = 30): FeedEntry[] {
+export function listingLinks(
+  html: string,
+  pageUrl: string,
+  limit = 30,
+  paths?: string[],
+): FeedEntry[] {
   const { document } = parseHTML(html);
   const page = new URL(pageUrl);
   const prefix = page.pathname.replace(/\/+$/, "");
@@ -17,7 +22,9 @@ export function listingLinks(html: string, pageUrl: string, limit = 30): FeedEnt
     }
     if (
       url.host !== page.host ||
-      !url.pathname.startsWith(`${prefix}/`) ||
+      !(paths?.length
+        ? paths.some((path) => url.pathname.startsWith(path))
+        : url.pathname.startsWith(`${prefix}/`)) ||
       url.pathname.replace(/\/+$/, "") === prefix
     )
       continue;
@@ -35,7 +42,25 @@ export function listingLinks(html: string, pageUrl: string, limit = 30): FeedEnt
 }
 
 export const fetchWebPage: Fetcher = async (source, ctx) => {
-  const res = await ctx.http.get(source.url, { headers: { accept: "text/html" } });
-  const entries = listingLinks(res.text, source.url);
+  const urls = [
+    source.url,
+    ...(source.options?.pages ?? []).slice(0, 4).map((path) => {
+      const url = new URL(path, source.url);
+      if (url.origin !== new URL(source.url).origin)
+        throw new Error("Listing pages must share the source origin");
+      return url.toString();
+    }),
+  ];
+  const entries: FeedEntry[] = [];
+  const seen = new Set<string>();
+  for (const url of urls) {
+    const res = await ctx.http.get(url, { headers: { accept: "text/html" } });
+    for (const entry of listingLinks(res.text, source.url, 30, source.options?.paths)) {
+      if (!seen.has(entry.url)) {
+        seen.add(entry.url);
+        entries.push(entry);
+      }
+    }
+  }
   return { ok: true, status: `200 ${entries.length} links`, entries };
 };

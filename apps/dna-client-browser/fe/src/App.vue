@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted } from "vue";
 import AgentColumn from "./components/AgentColumn.vue";
+import BookmarksDialog from "./components/BookmarksDialog.vue";
 import CardDetailDialog from "./components/CardDetailDialog.vue";
 import ExecutionsView from "./components/ExecutionsView.vue";
 import FeedColumn from "./components/FeedColumn.vue";
@@ -51,6 +52,7 @@ function resizeMove(e: PointerEvent) {
       <AgentColumn v-if="layout.agent" />
     </main>
     <ExecutionsView v-if="route.view === 'executions'" />
+    <BookmarksDialog v-if="ui.bookmarks" />
     <SettingsModal v-if="ui.settings" />
     <CardDetailDialog v-if="ui.card !== undefined" :id="ui.card" />
     <div v-if="toast" class="toast" :class="toast.kind" role="status">{{ toast.text }}</div>

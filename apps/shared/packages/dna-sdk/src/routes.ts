@@ -13,6 +13,30 @@ export interface RouteSpec {
 }
 
 export const ROUTES = {
+  "bookmarks.list": {
+    method: "GET",
+    path: "/v1/bookmarks",
+    scope: "read",
+    summary: "List saved material leads",
+  },
+  "bookmarks.add": {
+    method: "POST",
+    path: "/v1/bookmarks",
+    scope: "feedback",
+    summary: "Save a card as a material lead",
+  },
+  "bookmarks.update": {
+    method: "PATCH",
+    path: "/v1/bookmarks/:id",
+    scope: "feedback",
+    summary: "Update a saved lead note",
+  },
+  "bookmarks.remove": {
+    method: "DELETE",
+    path: "/v1/bookmarks/:id",
+    scope: "feedback",
+    summary: "Remove a saved lead",
+  },
   healthz: {
     method: "GET",
     path: "/healthz",
@@ -59,7 +83,7 @@ export const ROUTES = {
     method: "GET",
     path: "/v1/feed",
     scope: "read",
-    summary: "Cards oldest to newest, up to 1000 a page, paged backwards by cursor",
+    summary: "Cards by incremental value, highest first; pending by discovery time and relevance",
   },
   "feed.search": {
     method: "GET",

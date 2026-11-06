@@ -1,4 +1,4 @@
-import { Type } from "@earendil-works/pi-ai";
+import * as schema from "@earendil-works/pi-schema";
 import { defineAppTool, toolError, toolText } from "@dna/durable-agent";
 import type { Deps } from "../../deps.ts";
 import { clip, FixableError, requireItem } from "./shared.ts";
@@ -10,9 +10,9 @@ export function readItem(deps: Deps) {
       "Text: the item's title, source, dates, jev scores and findings, then its cached text clipped to max_chars.",
     description:
       "Read one item: title, source, url, dates, discussion, and its cached text (capped). Also shows findings and jev scores so far.",
-    parameters: Type.Object({
-      item_id: Type.Integer(),
-      max_chars: Type.Optional(Type.Integer({ minimum: 200, maximum: 6000 })),
+    parameters: schema.obj({
+      item_id: schema.int(),
+      max_chars: schema.opt(schema.int({ minimum: 200, maximum: 6000 })),
     }),
     replay: "safe",
     outputLimits: { maxBytes: 16_000 },

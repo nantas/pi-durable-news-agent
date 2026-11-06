@@ -84,3 +84,37 @@ test("a score legend that does not match the criteria is a contract error", asyn
   stub(t, async () => ok(bad));
   await assert.rejects(live().systemOne({ text: "x" }, questions), /legend/);
 });
+
+test("the official JEV endpoint receives its native model ID and its independent key", async (t) => {
+  const fetch = stub(t, async () => ok(valid));
+  const client = new JevClient({
+    provider: "typesafe",
+    apiKey: "official-fixture",
+    retryDelayMs: 0,
+  });
+  const result = await client.systemOne({ text: "x" }, questions, {
+    model: "~typesafe/jev-latest",
+  });
+  assert.equal(result.meta.cost.source, "unknown");
+  const args = fetch.mock.calls[0].arguments as unknown as [string, RequestInit];
+  assert.equal(args[0], "https://api.typesafe.ai/v1/systemone");
+  assert.equal(JSON.parse(args[1].body as string).model, "jev-latest");
+  assert.equal(
+    (args[1].headers as Record<string, string>).Authorization,
+    "Bearer official-fixture",
+  );
+});
+
+test("context-limit diagnostics include no provider response text or credentials", async (t) => {
+  const fetch = stub(t, async () =>
+    ok({ detail: { error_type: "max_tokens_exceeded", message: "fixture-secret" } }, 400),
+  );
+  await assert.rejects(
+    live().systemOne({ text: "x" }, questions),
+    (error) =>
+      error instanceof Error &&
+      error.message.includes("context budget") &&
+      !error.message.includes("fixture-secret"),
+  );
+  assert.equal(fetch.mock.callCount(), 1);
+});

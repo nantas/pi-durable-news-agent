@@ -26,7 +26,12 @@ test("a tool call detail carries timings, tokens, cost, context and its paid cal
   assert.equal(typeof detail.toolCostUsd, "number");
   assert.ok(detail.contextTokens! > 0);
   assert.ok(detail.generation, "the generation that asked for it");
-  assert.ok(detail.generation!.inputTokens > 0 && detail.generation!.outputTokens > 0);
+  assert.ok(
+    detail.generation!.inputTokens +
+      detail.generation!.cacheReadTokens +
+      detail.generation!.cacheWriteTokens >
+      0 && detail.generation!.outputTokens > 0,
+  );
   assert.equal(typeof detail.generation!.costUsd, "number");
 
   const jevRow = rows.find((r) => r.toolName === "jev_classify")!;

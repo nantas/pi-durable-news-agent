@@ -1,6 +1,13 @@
 // Cards as text blocks. H/F/S badges use symbols, never punctuation: ⚡ Signal 91  ✔ Facts 84  ▲ Hype 7, ranked.
 import { wrapTextWithAnsi, type Component } from "@earendil-works/pi-tui";
-import { ago, cleanText, type Card, type HfsCategory, type HfsScores } from "@dna/sdk";
+import {
+  assessmentText,
+  ago,
+  cleanText,
+  type Card,
+  type HfsCategory,
+  type HfsScores,
+} from "@dna/sdk";
 import { cut } from "./render.ts";
 import { c } from "./theme.ts";
 
@@ -107,7 +114,7 @@ export class CardBlock implements Component {
     return [
       cut(cardHead(this.card), width),
       ...cardBody(this.card).flatMap((l) => wrapLine(l)),
-      ...wrapLine(hfsBadges(this.card.hfs)),
+      ...wrapLine(assessmentText(this.card.assessment)),
       ...wrapLine(feedbackLine(this.card)),
       "",
     ];

@@ -173,7 +173,10 @@ export function createSweepTask(deps: Deps) {
           store.sweeps.update(sweepId, { status: "running" });
           store.sweeps.phase(sweepId, "gather", "running");
           publish(sweepId);
-          const since = new Date(Date.now() - MAX_AGE_DAYS * 86_400_000);
+          const since =
+            deps.config.provider === "faux"
+              ? new Date(Date.now() - MAX_AGE_DAYS * 86_400_000)
+              : new Date(0);
           const bag = work.bag ?? 1;
           const queries = planQueries(store, config.sweepQueries, {
             exclude: bag === 2 ? work.terms : undefined,
@@ -183,6 +186,7 @@ export function createSweepTask(deps: Deps) {
           const due = bag === 2 ? [] : store.sources.due();
           const fetched = await runParallel(due, 4, (source) =>
             fetchSource(source, {
+              run: deps.run,
               http: deps.http,
               store,
               log,
@@ -291,19 +295,27 @@ export function createSweepTask(deps: Deps) {
           const worthMin = judge.policy("worth-attention", "worth_min", 0.5);
           const chunk = store.news.items(work.itemIds.slice(work.cursor, work.cursor + GATE_CHUNK));
           await runParallel(chunk, 5, async (item) => {
-            if (item.relevance !== undefined && item.worth !== undefined) return;
+            if (
+              item.relevance !== undefined &&
+              (deps.config.provider !== "faux" || item.worth !== undefined)
+            )
+              return;
             try {
               const [rel, worth] = await Promise.all([
                 judge.relevance(item, { sweepId }),
-                judge.worth(item, { sweepId }),
+                deps.config.provider === "faux"
+                  ? judge.worth(item, { sweepId })
+                  : Promise.resolve(undefined),
               ]);
-              const passed = rel.relevance >= relevanceMin && worth.worth >= worthMin;
+              const passed = rel.relevance >= relevanceMin && (!worth || worth.worth >= worthMin);
               store.news.updateItem(item.id, {
                 relevance: rel.relevance,
                 matchedTopic: rel.matchedTopic,
-                worth: worth.worth,
-                novelty: worth.novelty,
-                attention: judge.preAttention(rel.relevance, worth.worth, worth.novelty),
+                worth: worth?.worth,
+                novelty: worth?.novelty,
+                attention: worth
+                  ? judge.preAttention(rel.relevance, worth.worth, worth.novelty)
+                  : Math.round(rel.relevance * 100),
                 status: passed ? "candidate" : "rejected",
               });
             } catch (error) {
@@ -333,7 +345,11 @@ export function createSweepTask(deps: Deps) {
             .filter((i) => i.status === "candidate" && !i.publishedAt && !i.dateSource);
           await runParallel(undated, 4, async (item) => {
             const { at } = await deps.dates.resolve(item);
-            if (at && Date.parse(at) < Date.now() - MAX_AGE_DAYS * 86_400_000)
+            if (
+              deps.config.provider === "faux" &&
+              at &&
+              Date.parse(at) < Date.now() - MAX_AGE_DAYS * 86_400_000
+            )
               store.news.updateItem(item.id, {
                 status: "rejected",
                 lastError: `Published ${at.slice(0, 10)}, older than ${MAX_AGE_DAYS} days`,
@@ -485,8 +501,7 @@ export function createSweepTask(deps: Deps) {
       },
       retry: async (task, runtime, ctx) => {
         const state = task.state.checkpoint as Extract<SweepState, { phase: "retry" }>;
-        await runtime.sleep(state.until, ctx);
-        await runtime.commit(() => ({ status: "running", checkpoint: state.resume }), ctx);
+        await runtime.sleepUntil(state.until, state.resume, ctx);
       },
     },
     abort: async (task, runtime, ctx) => {

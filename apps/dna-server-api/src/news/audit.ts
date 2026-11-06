@@ -17,17 +17,17 @@ export function auditSweep(store: Store, sweepId: number, log?: Logger): SweepAu
   const done: string[] = [];
   if (ok("run_news_sweep")) done.push("run_news_sweep");
   if (sweep.candidates > 0 && sweep.status !== "no_news") {
-    expected.push("research_items", "hfs for every presented item", "present_news");
+    expected.push("research_items", "assessment for every presented item", "present_news");
     if (ok("research_items")) done.push("research_items");
     const unclassified = presented.filter(
       (p) =>
         !store.db
           .prepare(
-            "SELECT 1 FROM classifications WHERE item_id = ? AND command = 'hfs' AND sweep_id = ?",
+            "SELECT 1 FROM items i JOIN assessments a ON a.id=i.current_assessment_id WHERE i.id = ? AND i.sweep_id = ?",
           )
           .get(p.item_id, sweepId),
     );
-    if (presented.length && !unclassified.length) done.push("hfs for every presented item");
+    if (presented.length && !unclassified.length) done.push("assessment for every presented item");
     if (ok("present_news")) done.push("present_news");
   }
   if (store.sources.offeredCount(sweepId) > 0) {

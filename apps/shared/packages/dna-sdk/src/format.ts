@@ -1,3 +1,12 @@
+import type { Assessment } from "./api.ts";
+
+export function assessmentText(a?: Assessment): string {
+  if (!a || a.status === "pending") return "待评估";
+  if (a.status === "unknown") return `覆盖依据不足${a.reason ? `：${a.reason}` : ""}`;
+  const scores = a.scores ? { ...a.scores, ...a.correction?.scores } : undefined;
+  return `${scores ? `游戏设计方法 ${scores.design}，创作与生产工具 ${scores.tools}，内容参考与储备 ${scores.reference}` : ""}，置信度 ${Math.round((a.confidence ?? 0) * 100)}%${a.reason ? `：${a.reason}` : ""}`;
+}
+
 // Small formatters shared by the browser, the TUI and the CLI. The UI rule: no dashes or dots as punctuation.
 export const k = (tokens: number) =>
   tokens >= 1_000_000

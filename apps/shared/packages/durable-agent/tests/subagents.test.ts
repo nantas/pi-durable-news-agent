@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Type } from "@earendil-works/pi-ai";
+import * as schema from "@earendil-works/pi-schema";
 import { defineExtension } from "@earendil-works/pi-durable";
 import { call, defineAppTool, runParallel, say, spawnSubagents, toolText } from "../src/index.ts";
 import { ask, fauxHarness, tempDir } from "./helpers.ts";
@@ -25,7 +25,7 @@ test("children answer in their own conversations; the parent sees only their ans
     const research = defineAppTool({
       name: "research",
       description: "Research in parallel",
-      parameters: Type.Object({ topics: Type.Array(Type.String()) }),
+      parameters: schema.obj({ topics: schema.arr(schema.str()) }),
       replay: "safe",
       execute: async (args, api, ctx) => {
         const results = await spawnSubagents(

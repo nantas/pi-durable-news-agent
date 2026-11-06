@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { Type } from "@earendil-works/pi-ai";
+import * as schema from "@earendil-works/pi-schema";
 import { defineExtension } from "@earendil-works/pi-durable";
 import {
   call,
@@ -16,7 +16,7 @@ import { ask, fauxHarness, memoryTelemetry, tempDir, until } from "./helpers.ts"
 const echo = defineAppTool({
   name: "echo",
   description: "Echo",
-  parameters: Type.Object({ text: Type.String() }),
+  parameters: schema.obj({ text: schema.str() }),
   replay: "safe",
   execute: async (args) => {
     await new Promise((r) => setTimeout(r, 30));

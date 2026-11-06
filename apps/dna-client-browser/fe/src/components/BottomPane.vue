@@ -4,13 +4,15 @@ import { ref } from "vue";
 import { ArrowDown } from "@lucide/vue";
 import { usePinned } from "../client/pin";
 
-const props = defineProps<{ count: number; label: string }>();
+const props = defineProps<{ count: number; label: string; top?: boolean }>();
 const scroller = ref<HTMLElement>();
-const { unseen, jump } = usePinned(scroller, () => props.count);
+const { unseen, jump } = props.top
+  ? { unseen: ref(0), jump: () => {} }
+  : usePinned(scroller, () => props.count);
 </script>
 
 <template>
-  <div class="bottom-pane">
+  <div class="bottom-pane" :class="{ 'top-pane': top }">
     <div ref="scroller" class="bottom-scroll" :aria-label="label">
       <div class="bottom-inner"><slot /></div>
     </div>
@@ -24,3 +26,9 @@ const { unseen, jump } = usePinned(scroller, () => props.count);
     </button>
   </div>
 </template>
+
+<style scoped>
+.top-pane .bottom-inner {
+  margin-top: 0;
+}
+</style>

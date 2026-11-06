@@ -1,7 +1,7 @@
 # Pi Durable News Agent
 
 > **This agent does not wait for you to work. It works for you, then waits, then keeps working.**
-> A proactive news agent built on pi-durable that sorts every story into Hype, Facts and Signal with jev, on your Mac, an always-on Mac mini or a cloud VM.
+> 面向游戏创作的持久新闻代理，通过 my-wiki 覆盖证据与 JEV 评估三类增量价值，支持自然语言评分校准和待收藏列表。当前集成为同机部署。
 
 📺 Watch this video to get the full breakdown of this codebase: **[Proactive Agents: a pi-durable agent that filters Hype, Facts and Signal on YouTube](https://youtu.be/OLqP8jxJ0Wc)**
 
@@ -11,7 +11,7 @@
 
 In the age of AI there is exponentially more noise than signal: clickbait, overhyped launches and attention theft. As an engineer, your time and attention are your most important resources. This codebase is a **proactive agent** that guards them.
 
-Every few minutes a cron tick wakes a durable agent. It checks 28 sources (news feeds, Hacker News, GitHub releases, benchmark blogs) and searches the last 7 days for 15 of your topics, lets jev throw out what is off topic or not worth a look, folds repeated coverage into one story, ranks the rest by importance and keeps the top 7, sends research subagents after the strongest items, scores each one as **Hype, Facts and Signal**, and renders it as a card it picks from a fixed component catalog. Then it waits. When it crashes, restarts or loses a provider call, it resumes from its last checkpoint and never pays twice for finished work. **News worth your attention, from an agent that does not need you to start it.**
+定时采集 RSS、网页、YouTube 频道与 GitHub 话题，先把相关且不重复的材料呈现到 Feed，再用后台批量 durable task 准备覆盖证据并执行 JEV。游戏设计方法、创作与生产工具、内容参考与储备分别给出 0–100 综合增量价值；适用性、新增程度、创作价值和概率分布单独保留。评分更新原地显示，刷新或下一轮采集后按三类最大值、主题／来源权重与新鲜度高分置顶。unknown 不当作零分，Bookmark 只保存线索。
 
 ---
 
@@ -27,16 +27,28 @@ The `/install` command checks Node 24 and `just`, installs the workspaces, confi
 
 ### Manual Install
 
-**Prereqs:** [Node 24](https://nodejs.org), [`just`](https://github.com/casey/just), an [OpenRouter](https://openrouter.ai) key. Optional: an [OpenAI](https://platform.openai.com) key for card images when a source has none, a [Firecrawl](https://firecrawl.dev) key for richer page reads, `tmux` for the TUI smoke, Google Chrome for the UI suite.
+**Prereqs:** [Node 24](https://nodejs.org), [`just`](https://github.com/casey/just), Pi login for the explicitly configured models, and an official TypeSafe API key for JEV. Optional: a [Firecrawl](https://firecrawl.dev) key for richer page reads, `tmux` for the TUI smoke, Google Chrome for the UI suite.
 
 ```bash
 just install                       # npm install for every workspace
-cp .env.example .env               # then add OPENROUTER_API_KEY (and OPENAI_API_KEY if you want generated images)
+cp .env.example .env               # then configure explicit model roles and TYPESAFE_API_KEY
 just api tokens                    # writes DNA_CLIENT_TOKEN and DNA_CRON_TOKEN (prints names, never values)
 just combos dev                    # free and offline: faux model, fixture news, UI on http://localhost:4851
 just combos local                  # the real thing on this Mac: API, UI on http://localhost:4851, and the every minute tick
 just net down local                # stop the API, the UI and the tick
 ```
+
+本机在 Git 忽略的 `.env` 配置 `DNA_WIKI_DIR`（my-wiki 仓库绝对路径）、六个显式模型角色和 `TYPESAFE_API_KEY`。普通 LLM 复用 Pi `login` 的 API key／OAuth 凭据，JEV 独立调用官方接口。按当前决定，深度研究与覆盖证据使用 `deepseek/deepseek-flash`，其余角色使用 `zai-coding-cn/glm-5.3-flash`；没有默认模型或隐式回退。只使用来源图片，没有可用图片就不显示图片。`FIRECRAWL_API_KEY` 可选。不要把本机路径、密钥、`dna-network.yaml`、`data/` 或 `logs/` 加入 Git。
+
+`just cli run doctor` 检查本地依赖、配置、API 与权限；`just cli run doctor --live` 额外检查 gh 鉴权及只读 SDK 工具加载，不调用付费模型。Node 24、npm、just、Git、Pi SDK 和 wiki 配置为必需项；gh 与 yt-dlp 是否必需取决于启用的来源。真实模型 smoke test 需单独显式执行并控制额度，不在默认测试中运行。
+
+Browser 的“评分不准”、`just cli run calibrate <card-id> <原话>` 和 TUI `/calibrate <card-id> <原话>` 都进入 durable Agent 对话。明确修正及理由直接保存并回显，含糊表述先追问；“更多／更少”只调整偏好。
+
+待收藏列表使用 Browser 按钮、CLI `bookmarks list|add|note|rm` 或 TUI `/bookmarks list|add|note|rm`。它只保存材料引用、标题、canonical URL、来源、时间和备注，不自动阅读、生成提案或委派到知识库。来源 `youtube_channel` 使用已确认的频道 ID；`github_topic` 的新增参数为 GitHub 查询，如 `topic:godot`。GitHub 7／30 天 star 净增量需要本机日快照基线，首次运行不伪造历史值。
+
+按需参考库与 X 辅助发现通过 Agent 的 `reference_search` 和 `x_discover` 使用，不加入定时 Feed。参考结果只保留元数据和原链接；X 线索标明索引延迟、覆盖缺口及第三方公开回填来源。
+
+API 与 Browser 可分别通过 `just api dev`、`just browser dev` 启动，前台运行以 Ctrl+C 停止；cron 只负责触发，任务状态由 API 的 SQLite 保存。运行日志位于被忽略的 `logs/`。首次迁移或部署前备份 `data/`，恢复时保留 `dna.sqlite` 与 `agent.sqlite`。校验使用 `just test unit`、`just test faux`、`just test prompts`、`just test ui`、`just test docs`。
 
 ---
 
@@ -118,7 +130,9 @@ jev judges at every gate, and ranks importance too, at about $0.00004 a call, so
 
 ---
 
-## Hype, Facts and Signal
+## 历史 HFS fixture
+
+以下 HFS 展示与比较保留用于离线 fixture，不是生产增量评分路径。当前领域规范以 `CONTEXT.md` 和 `docs/adr/` 为准。
 
 <p align="center">
   <img src="images/04_hfs_ranking.png" alt="jev ranks one item: Signal 91, Facts 84, Hype 7" width="780">
@@ -204,7 +218,7 @@ Measured through OpenRouter with Claude Haiku 5.5 in free web search mode:
 | A sweep with news after that | about $0.0065 (model and jev), 2 to 7 cards, under a minute |
 | A sweep with nothing new | about $0.003: unchanged sources are skipped by their content hash |
 | jev | about $0.00004 a call |
-| Generated card images (OpenAI, only when a source has none) | about $0.005 each |
+| Card images | source images only; no generation |
 | Search | free: Bing News, Google News, Hacker News, direct feeds |
 
 Almost all model spend is the agent re-reading its chat on every tool turn, so it grows with the chat. Pick 15 or 30 minutes in the top bar to spend less, or compact the chat.
@@ -228,7 +242,7 @@ These are tested, not promised:
 - `apps/dna-server-api/tests/recovery.test.ts` SIGKILLs the server in the middle of the jev gate. The restarted server resumes at the last chunk, pays jev once per item and presents each card once.
 - `apps/shared/tests/live/restart.mjs <device>` restarts a device's service while the real agent is mid sweep. The sweep completes and the audit stays clean.
 - Tool calls that create a task or a subagent run once per tool task, so a replay finds the same child instead of creating another.
-- The provider, jev, search and image calls retry with backoff, and the cron tick retries at 2 s, 8 s and 30 s.
+- The provider, jev and search calls retry with backoff, and the cron tick retries at 2 s, 8 s and 30 s.
 - One bad run never blocks the schedule. A sweep whose run ends without `complete_sweep` closes as stalled at once, and a sweep queued behind a failed run is withdrawn, so the next tick starts fresh.
 
 ---
@@ -244,7 +258,7 @@ pi-durable-news-agent/
 │   │   ├── src/agents/          # news-desk, news-researcher, deep-research, one file per tool, the faux script
 │   │   ├── src/news/            # sources, the search chain, jev judge, stories, images, timelines, sweep task
 │   │   ├── src/db/migrations/   # 001_schema.sql, the whole schema
-│   │   ├── prompt_engineering/  # agents/<agent>/ prompts, jev/<command>/command.json, images/news-card
+│   │   ├── prompt_engineering/  # agents/<agent>/ prompts, jev/<command>/command.json
 │   │   ├── config/              # default sources and keywords
 │   │   ├── deploy/              # launchd plist and systemd unit templates
 │   │   └── tests/               # faux sweep, crash recovery, search chain, auth, stream, executions, settings

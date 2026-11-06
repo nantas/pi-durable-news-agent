@@ -1,0 +1,31 @@
+{
+  "name": "coverage",
+  "version": 1,
+  "description": "基于覆盖证据的增量评估",
+  "model": "~typesafe/jev-latest",
+  "state": {
+    "material": "{{material}}",
+    "claims": "{{claims}}",
+    "coverage": "{{coverage}}",
+    "calibrationExamples": "{{calibrationExamples}}"
+  },
+  "questions": {
+    "coverage": {
+      "type": "choice",
+      "instructions": {
+        "claim": "{{claim}}",
+        "task": "判断当前 claim 的覆盖程度，仅使用固定证据及查询回执；失败、未充分阅读或检索范围不足必须为unknown。不可编造路径或证据。"
+      },
+      "criteria": {
+        "covered": "已消化知识充分覆盖",
+        "partial": "部分覆盖或仅有原始材料",
+        "not_covered": "完成合理分层查询及阅读后未覆盖",
+        "unknown": "检索失败或依据不足"
+      }
+    }
+  },
+  "each": {
+    "over": "claims",
+    "as": "claim"
+  }
+}

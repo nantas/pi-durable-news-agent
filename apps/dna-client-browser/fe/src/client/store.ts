@@ -99,7 +99,7 @@ export function start(): () => void {
   void follow(
     (signal) => api.stream(signal),
     (frame) => {
-      if (frame.type === "hello")
+      if (frame.type === "hello" || (frame.type === "sweep" && frame.sweep.status === "completed"))
         void loadSnapshot().catch((e) => notify(String(e.message ?? e), "bad"));
       agent.apply(frame);
       feed.apply(frame);
@@ -125,5 +125,7 @@ export const ui = reactive({
   settings: false,
   models: false,
   compaction: false,
+  calibrationCard: undefined as number | undefined,
+  bookmarks: false,
   card: undefined as number | undefined,
 });

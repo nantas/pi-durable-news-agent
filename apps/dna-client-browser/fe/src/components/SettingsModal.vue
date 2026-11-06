@@ -25,6 +25,8 @@ const SOURCE_KINDS: SourceKind[] = [
   "hn_search",
   "github_releases",
   "web_page",
+  "youtube_channel",
+  "github_topic",
 ];
 const tab = ref<"keywords" | "sources" | "search" | "taste" | "tools">("keywords");
 const tools = ref<ToolInfo[]>();
@@ -88,7 +90,13 @@ async function addSource() {
   if (!s.name.trim()) return;
   if (
     await attempt(() =>
-      api.addSource({ kind: s.kind, name: s.name.trim(), url: s.url.trim() || undefined }),
+      api.addSource({
+        kind: s.kind,
+        name: s.name.trim(),
+        ...(["github_topic", "hn_search"].includes(s.kind)
+          ? { query: s.url.trim() || undefined }
+          : { url: s.url.trim() || undefined }),
+      }),
     )
   ) {
     source.value = { kind: "rss", name: "", url: "" };
@@ -297,7 +305,15 @@ async function removeSource(s: Source) {
             <option v-for="k in SOURCE_KINDS" :key="k" :value="k">{{ k }}</option>
           </select>
           <input v-model="source.name" aria-label="Source name" placeholder="Name" />
-          <input v-model="source.url" aria-label="Source URL" placeholder="https URL" />
+          <input
+            v-model="source.url"
+            :aria-label="
+              ['github_topic', 'hn_search'].includes(source.kind) ? 'Source query' : 'Source URL'
+            "
+            :placeholder="
+              source.kind === 'github_topic' ? 'topic:godot' : 'https URL or search query'
+            "
+          />
           <button class="button small" type="submit"><Plus :size="14" />Add</button>
         </form>
       </div>

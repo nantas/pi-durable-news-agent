@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { BadgeCheck, Megaphone, ThumbsDown, ThumbsUp, Zap } from "@lucide/vue";
 import { HFS_CATEGORIES, type Card, type HfsCategory } from "@dna/sdk";
-import { api, attempt, notify } from "../client/store";
+import { api, attempt, notify, referenceInChat, ui } from "../client/store";
 
 const props = defineProps<{ card: Card }>();
 const ICONS = { hype: Megaphone, facts: BadgeCheck, signal: Zap };
@@ -28,10 +28,27 @@ async function label(category: HfsCategory) {
     : [...current, category];
   await attempt(() => api.feedback(props.card.id, { labels: next }));
 }
+async function bookmark() {
+  await attempt(async () => {
+    await api.addBookmark(props.card.id);
+    notify("已保存到待收藏列表");
+  });
+}
 </script>
 
 <template>
   <div class="feedback">
+    <button
+      class="fb"
+      data-cap="feedback.calibrate"
+      @click="
+        ui.calibrationCard = card.id;
+        referenceInChat(`评分不准（卡片 ${card.id}）：`);
+      "
+    >
+      评分不准
+    </button>
+    <button class="fb" aria-label="收藏线索" title="收藏线索" @click="bookmark">收藏</button>
     <button
       class="fb"
       data-cap="feedback.more"

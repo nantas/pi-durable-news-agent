@@ -5,7 +5,7 @@ import { ms, type CardDetail } from "@dna/sdk";
 import { go } from "../client/route";
 import { api, attempt, ui } from "../client/store";
 import { clean } from "../client/text";
-import HfsPill from "./HfsPill.vue";
+import { assessmentText } from "@dna/sdk";
 import LoadingRows from "./LoadingRows.vue";
 
 const props = defineProps<{ id: number }>();
@@ -26,7 +26,30 @@ function openTool(id: number) {
         <button class="icon-button" aria-label="Close" @click="close"><X :size="18" /></button>
       </header>
       <template v-if="detail">
-        <HfsPill :hfs="detail.card.hfs" />
+        <p>{{ assessmentText(detail.card.assessment) }}</p>
+        <template v-if="detail.card.assessment">
+          <h3>核心主张</h3>
+          <p v-for="claim in detail.card.assessment.claims" :key="claim.id">{{ claim.text }}</p>
+          <h3>覆盖证据</h3>
+          <div v-for="evidence in detail.card.assessment.evidence" :key="evidence.id">
+            <p>{{ evidence.path }}（{{ evidence.layer }}）</p>
+            <blockquote>{{ evidence.excerpt }}</blockquote>
+            <small>{{ evidence.contentHash }}</small>
+          </div>
+          <h3>查询回执</h3>
+          <p v-for="(query, index) in detail.card.assessment.queries" :key="index">
+            {{ query.claimId }}：{{ query.queries.join("，") }}，{{ query.scopes.join("，") }}
+            {{ query.error }}
+          </p>
+          <h3>评分快照</h3>
+          <p>
+            {{ detail.card.assessment.command }} v{{ detail.card.assessment.version }}，{{
+              detail.card.assessment.readingDepth
+            }}
+          </p>
+          <p>材料：{{ detail.card.assessment.materialHash }}</p>
+          <p>覆盖：{{ detail.card.assessment.coverageSnapshot }}</p>
+        </template>
         <dl v-if="detail.item" class="facts-grid">
           <dt>Source</dt>
           <dd>{{ clean(detail.item.sourceName ?? "") }}</dd>

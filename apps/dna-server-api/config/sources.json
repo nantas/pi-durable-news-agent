@@ -193,6 +193,169 @@
       "url": "https://arcprize.org/blog",
       "interval_min": 30,
       "weight": 1.0
+    },
+    {
+      "kind": "rss",
+      "name": "Skeleton Code Machine",
+      "url": "https://www.skeletoncodemachine.com/feed",
+      "interval_min": 30,
+      "weight": 1.0,
+      "options": {}
+    },
+    {
+      "kind": "rss",
+      "name": "Space-Biff!",
+      "url": "https://spacebiff.com/feed/",
+      "interval_min": 30,
+      "weight": 1.0,
+      "options": {}
+    },
+    {
+      "kind": "rss",
+      "name": "Godot Blog",
+      "url": "https://godotengine.org/rss.xml",
+      "interval_min": 30,
+      "weight": 1.0,
+      "options": {}
+    },
+    {
+      "kind": "rss",
+      "name": "ComfyUI Blog",
+      "url": "https://blog.comfy.org/feed.xml",
+      "interval_min": 30,
+      "weight": 1.0,
+      "options": {
+        "excludeTerms": ["sale ends", "discount code", "weekly deals"]
+      }
+    },
+    {
+      "kind": "rss",
+      "name": "A Sound Effect",
+      "url": "https://www.asoundeffect.com/feed/",
+      "interval_min": 30,
+      "weight": 1.0,
+      "options": {
+        "excludeTerms": ["sale ends", "discount code", "weekly deals"]
+      }
+    },
+    {
+      "kind": "rss",
+      "name": "The Public Domain Review",
+      "url": "https://publicdomainreview.org/rss.xml",
+      "interval_min": 30,
+      "weight": 1.0,
+      "options": {}
+    },
+    {
+      "kind": "rss",
+      "name": "Animation Obsessive",
+      "url": "https://www.animationobsessive.com/feed",
+      "interval_min": 30,
+      "weight": 1.0,
+      "options": {}
+    },
+    {
+      "kind": "rss",
+      "name": "Stonemaier Games",
+      "url": "https://stonemaiergames.com/feed/",
+      "interval_min": 30,
+      "weight": 1.0,
+      "options": {}
+    },
+    {
+      "kind": "web_page",
+      "name": "Game Developer Design",
+      "url": "https://www.gamedeveloper.com/design",
+      "interval_min": 30,
+      "weight": 1.0,
+      "options": {
+        "paths": ["/design/"],
+        "pages": ["/design?page=1", "/design?page=2"]
+      }
+    },
+    {
+      "kind": "web_page",
+      "name": "Mega Crit News",
+      "url": "https://www.megacrit.com/news/",
+      "interval_min": 30,
+      "weight": 1.0
+    },
+    {
+      "kind": "youtube_channel",
+      "name": "Game Maker's Toolkit",
+      "url": "https://www.youtube.com/channel/UCqJ-Xo29CKyLTjn6z2XwYAw",
+      "interval_min": 30,
+      "weight": 1.0
+    },
+    {
+      "kind": "youtube_channel",
+      "name": "GDC Festival of Gaming",
+      "url": "https://www.youtube.com/channel/UC0JB7TSe49lg56u6qH8y_MQ",
+      "interval_min": 30,
+      "weight": 1.0
+    },
+    {
+      "kind": "youtube_channel",
+      "name": "Architect of Games",
+      "url": "https://www.youtube.com/channel/UCY3A_5R_m3PXCn5XDhvBBsg",
+      "interval_min": 30,
+      "weight": 1.0
+    },
+    {
+      "kind": "youtube_channel",
+      "name": "Mix and Jam",
+      "url": "https://www.youtube.com/channel/UCLyVUwlB_Hahir_VsKkGPIA",
+      "interval_min": 30,
+      "weight": 1.0
+    },
+    {
+      "kind": "youtube_channel",
+      "name": "Game Industry Conference",
+      "url": "https://www.youtube.com/channel/UCqIOZap9912nFur6wwR-7pg",
+      "interval_min": 30,
+      "weight": 1.0
+    },
+    {
+      "kind": "youtube_channel",
+      "name": "Tabletop Turtle",
+      "url": "https://www.youtube.com/channel/UCtSceS-m9i8WU7zNJJJu_0Q",
+      "interval_min": 30,
+      "weight": 1.0
+    },
+    {
+      "kind": "youtube_channel",
+      "name": "Penusbmic",
+      "url": "https://www.youtube.com/channel/UCjU-rielI7RsX1hqsCQdfhw",
+      "interval_min": 30,
+      "weight": 1.0
+    },
+    {
+      "kind": "youtube_channel",
+      "name": "Gamefromscratch",
+      "url": "https://www.youtube.com/channel/UCr-5TdGkKszdbboXXsFZJTQ",
+      "interval_min": 30,
+      "weight": 1.0
+    },
+    {
+      "kind": "youtube_channel",
+      "name": "Matt Pocock",
+      "url": "https://www.youtube.com/channel/UCswG6FSbgZjbWtdf_hMLaow",
+      "interval_min": 30,
+      "weight": 1.0
+    },
+    {
+      "kind": "youtube_channel",
+      "name": "Eero Alvar",
+      "url": "https://www.youtube.com/channel/UCGmPSaSxslbRUKPTbGk8ENQ",
+      "interval_min": 30,
+      "weight": 1.0
+    },
+    {
+      "kind": "github_topic",
+      "name": "GitHub game creation topics",
+      "query": "topic:game-development",
+      "interval_min": 30,
+      "weight": 1.0
     }
   ]
 }

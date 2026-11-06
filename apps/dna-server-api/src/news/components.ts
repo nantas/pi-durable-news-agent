@@ -52,7 +52,7 @@ export function checkComponent(input: RuleInput): string | undefined {
   return undefined;
 }
 
-export function componentCatalog(): string {
+export function componentCatalog(legacyFixtures = true): string {
   const row = (c: CardComponent) => {
     const s = COMPONENT_SPECS[c];
     return `| ${c} | ${s.use} | ${s.required.join(", ")} | ${s.rule} |`;
@@ -61,6 +61,9 @@ export function componentCatalog(): string {
     "News components (present_news):",
     "| component | use when | required props | rule |",
     "|---|---|---|---|",
-    ...NEWS_COMPONENTS.map(row),
+    ...NEWS_COMPONENTS.filter(
+      (component) =>
+        legacyFixtures || !["signal_alert", "hype_watch", "fact_check"].includes(component),
+    ).map(row),
   ].join("\n");
 }

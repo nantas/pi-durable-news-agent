@@ -1,6 +1,6 @@
 // Tool helpers: tools that teach the model when a call fails, exactly-once effects, allow-lists.
 import type { Context, JsonValue } from "@earendil-works/chord";
-import type { Static, TSchema } from "@earendil-works/pi-ai";
+import type { Static, Schema as TSchema } from "@earendil-works/pi-schema";
 import {
   defineDoc,
   defineTool,
@@ -77,13 +77,13 @@ export function toolText<D extends JsonValue = JsonValue>(
   text: string,
   details?: D,
 ): ToolExecutionResult<D> {
-  return { content: [{ type: "text", text }], ...(details === undefined ? {} : { details }) };
+  return { output: [{ type: "text", text }], ...(details === undefined ? {} : { details }) };
 }
 
 /** A failed call the model can fix: returned, not thrown, so work the call owns survives. */
 export function toolError(message: string, hints: string[] = []): ToolExecutionResult {
   const text = [message, ...hints.map((h) => `Fix: ${h}`)].join("\n");
-  return { isError: true, content: [{ type: "text", text }] };
+  return { isError: true, output: [{ type: "text", text }] };
 }
 
 /**
@@ -116,6 +116,7 @@ export const TaskReceipt = defineDoc<{ value: JsonValue }>({
   kind: "durable-agent.receipt",
   version: 1,
   scope: "task",
+  checkpointWhen: () => true,
   initial: () => ({ value: null }),
 });
 

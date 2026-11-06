@@ -2,6 +2,8 @@
 // subagents) and deep-research (subagents of a deep dive the reader asked for).
 import { join } from "node:path";
 import {
+  CompactionTask,
+  hook,
   defineExtension,
   section,
   type AgentChange,
@@ -11,8 +13,13 @@ import { allowOnly, loadPrompt, observability } from "@dna/durable-agent";
 import type { Deps } from "../deps.ts";
 import { componentCatalog } from "../news/components.ts";
 import { createDeepResearchTask, deepResearchSetting } from "../news/deep-research.ts";
+import { createAssessmentTask } from "../news/assessment-task.ts";
 import { createImageTask } from "../news/image-task.ts";
 import { createSweepTask } from "../news/sweep-task.ts";
+import { assessMaterial } from "./tools/assess-incremental.ts";
+import { calibrateScore, readCalibration } from "./tools/calibration.ts";
+import { referenceSearch } from "./tools/reference-search.ts";
+import { xDiscover } from "./tools/x-discover.ts";
 import { askTaste } from "./tools/ask-taste.ts";
 import { completeSweep } from "./tools/complete-sweep.ts";
 import { deepDiveResearch } from "./tools/deep-dive-research.ts";
@@ -39,6 +46,11 @@ import { scrapeUrl } from "./tools/scrape-url.ts";
 import { searchWeb } from "./tools/search-web.ts";
 
 export const DESK_TOOLS = [
+  "x_discover",
+  "reference_search",
+  "assess_incremental",
+  "calibrate_score",
+  "read_calibration",
   "run_news_sweep",
   "list_candidates",
   "read_item",
@@ -71,6 +83,7 @@ export const RESEARCHER_TOOLS = [
 export const DEEP_RESEARCH_TOOLS = ["deep_search", "open_page", "read_item"] as const;
 
 export interface Agents {
+  assessmentTask: ReturnType<typeof createAssessmentTask>;
   newsDesk: Extension;
   newsResearcher: Extension;
   deepResearch: Extension;
@@ -91,6 +104,7 @@ export function createAgents(deps: Deps): Agents {
   const agentsDir = join(deps.config.promptsDir, "agents");
   const sweepTask = createSweepTask(deps);
   const imageTask = createImageTask(deps);
+  const assessmentTask = createAssessmentTask(deps);
   const deepResearchTask = createDeepResearchTask(deps);
   const observe = observability({
     event: (e) => {
@@ -105,7 +119,7 @@ export function createAgents(deps: Deps): Agents {
   const deskPrompt = loadPrompt(agentsDir, "news-desk", "SYSTEM_PROMPT.md", {
     device_name: deps.config.device,
     search_mode: deps.search.mode,
-    component_catalog: componentCatalog(),
+    component_catalog: componentCatalog(deps.config.provider === "faux"),
   });
   const researcherPrompt = loadPrompt(agentsDir, "news-researcher", "SYSTEM_PROMPT.md", {});
   const deepResearchPrompt = loadPrompt(agentsDir, "deep-research", "SYSTEM_PROMPT.md", {
@@ -114,6 +128,19 @@ export function createAgents(deps: Deps): Agents {
         ? "Firecrawl (web and news search, full page scrapes), with free search engines and direct page fetches when it fails"
         : "free search engines (Bing web, DuckDuckGo, Bing News, Google News, Hacker News) and direct page fetches",
   });
+  const summaryPrompt = loadPrompt(agentsDir, "compaction", "SYSTEM_PROMPT.md", {});
+  const summarize = () =>
+    hook(CompactionTask, {
+      beforeCompact: async (input) => {
+        const { text } = await deps.summary.ask(
+          "compaction",
+          summaryPrompt,
+          JSON.stringify({ messages: input.messages, instructions: input.instructions }),
+        );
+        if (!text) throw new Error("The summary model returned an empty compaction summary");
+        return { summary: text };
+      },
+    });
   const shared = {
     readItem: readItem(deps),
     searchWeb: searchWeb(deps),
@@ -132,13 +159,13 @@ export function createAgents(deps: Deps): Agents {
     name: "news-researcher",
     tools: researcherTools,
     sections: [section("news-researcher", () => researcherPrompt, { tag: false })],
-    hooks: [allowOnly("news-researcher", RESEARCHER_TOOLS)],
+    hooks: [summarize(), allowOnly("news-researcher", RESEARCHER_TOOLS)],
   });
   const researcher = (): AgentChange => ({
     model:
       deps.catalog.provider === "faux"
         ? deps.catalog.defaultModel
-        : deps.catalog.ref(deps.config.researchModel),
+        : deps.catalog.ref(deps.store.settings.get("researchModel", deps.config.researchModel)),
     thinkingLevel: "low",
     extensions: [newsResearcher, observe],
   });
@@ -147,10 +174,10 @@ export function createAgents(deps: Deps): Agents {
     name: "deep-research",
     tools: deepResearchTools,
     sections: [section("deep-research", () => deepResearchPrompt, { tag: false })],
-    hooks: [allowOnly("deep-research", DEEP_RESEARCH_TOOLS)],
+    hooks: [summarize(), allowOnly("deep-research", DEEP_RESEARCH_TOOLS)],
   });
   const deepResearcher = (): AgentChange => {
-    const setting = deepResearchSetting(deps.store);
+    const setting = deepResearchSetting(deps.store, deps.config.deepResearchModel);
     return {
       model:
         deps.catalog.provider === "faux"
@@ -161,6 +188,11 @@ export function createAgents(deps: Deps): Agents {
     };
   };
   const deskTools = [
+    xDiscover(deps),
+    referenceSearch(deps),
+    assessMaterial(deps),
+    calibrateScore(deps),
+    readCalibration(deps),
     runNewsSweep(deps, sweepTask),
     listCandidates(deps),
     shared.readItem,
@@ -169,7 +201,7 @@ export function createAgents(deps: Deps): Agents {
     hyperFetch(deps),
     researchItems(deps, researcher),
     shared.jevClassify,
-    presentNews(deps, imageTask),
+    presentNews(deps),
     presentTimeline(deps),
     askTaste(deps),
     readTaste(deps),
@@ -181,16 +213,17 @@ export function createAgents(deps: Deps): Agents {
     openTab(deps),
     highlightItem(deps),
     setSchedule(deps),
-    completeSweep(deps),
+    completeSweep(deps, assessmentTask),
   ];
   const newsDesk = defineExtension({
     name: "news-desk",
     tools: deskTools,
     sections: [section("news-desk", () => deskPrompt, { tag: false })],
-    hooks: [allowOnly("news-desk", DESK_TOOLS)],
-    tasks: [sweepTask, imageTask, deepResearchTask],
+    hooks: [summarize(), allowOnly("news-desk", DESK_TOOLS)],
+    tasks: [sweepTask, imageTask, deepResearchTask, assessmentTask],
   });
   return {
+    assessmentTask,
     newsDesk,
     newsResearcher,
     deepResearch,

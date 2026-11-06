@@ -6,7 +6,7 @@ import { computed, nextTick, ref, watch } from "vue";
 import { Cpu, Send, Square } from "@lucide/vue";
 import { newRequestId, type WhenBusy } from "@dna/sdk";
 import { layout } from "../client/layout";
-import { agentState, api, attempt, composerFocus, draft, notify } from "../client/store";
+import { agentState, api, attempt, composerFocus, draft, notify, ui } from "../client/store";
 import ContextBar from "./ContextBar.vue";
 import ModelControls from "./ModelControls.vue";
 
@@ -40,12 +40,18 @@ async function send() {
   if (!content || sending.value) return;
   sending.value = true;
   const r = await attempt(() =>
-    api.send({ content, requestId: pendingId(content), mode: mode.value }),
+    api.send({
+      content,
+      cardId: ui.calibrationCard,
+      requestId: pendingId(JSON.stringify({ content, cardId: ui.calibrationCard })),
+      mode: mode.value,
+    }),
   );
   sending.value = false;
   if (!r) return;
   sessionStorage.removeItem(PENDING);
   text.value = "";
+  ui.calibrationCard = undefined;
 }
 function onKey(e: KeyboardEvent) {
   if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {

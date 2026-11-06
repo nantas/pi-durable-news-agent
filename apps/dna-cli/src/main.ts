@@ -33,6 +33,7 @@ const { values: flags, positionals } = parseArgs({
     device: { type: "string" },
     url: { type: "string" },
     json: { type: "boolean", default: false },
+    live: { type: "boolean", default: false },
     kind: { type: "string" },
     limit: { type: "string" },
     days: { type: "string" },
@@ -360,9 +361,16 @@ const COMMANDS: Record<string, Command> = {
     },
   },
   model: {
-    usage: "model [id] | model quick [id]",
+    usage: "model [id] | model quick|research|coverage|summary [id]",
     summary: "List models, or pick one; quick is the model for one-shot jobs such as publish dates",
     async run() {
+      if (["research", "coverage", "summary"].includes(args[0])) {
+        const role = args[0] as "research" | "coverage" | "summary";
+        const state = args[1]
+          ? await client().configure({ [`${role}Model`]: args[1] })
+          : await client().agent();
+        return { data: state.roles, text: `${role}: ${state.roles?.[role] ?? "unconfigured"}` };
+      }
       if (args[0] === "quick") {
         const state = args[1]
           ? await client().configure({ quickModel: args[1] })
@@ -472,6 +480,43 @@ const COMMANDS: Record<string, Command> = {
       throw new Usage(COMMANDS.keywords.usage);
     },
   },
+  calibrate: {
+    usage: "calibrate <card id> <message>",
+    summary: "Discuss a scoring correction with the durable Agent",
+    async run() {
+      const content = args.slice(1).join(" ").trim();
+      if (!content) throw new Usage(COMMANDS.calibrate.usage);
+      const data = await client().send({
+        cardId: num(args[0], "card id"),
+        content,
+        waitMs: 120000,
+      });
+      return {
+        data,
+        text:
+          data.status === "done" ? data.answer.text : `Queued as submission ${data.submissionId}`,
+      };
+    },
+  },
+  bookmarks: {
+    usage: "bookmarks [list | add <card id> [note] | note <id> [note] | rm <id>]",
+    summary: "Save, list, annotate and remove material leads",
+    async run() {
+      const [verb, value, ...note] = args;
+      if (verb === "add") await client().addBookmark(num(value, "card id"), note.join(" "));
+      else if (verb === "note")
+        await client().updateBookmark(num(value, "bookmark id"), note.join(" "));
+      else if (verb === "rm") await client().removeBookmark(num(value, "bookmark id"));
+      else if (verb && verb !== "list") throw new Usage(COMMANDS.bookmarks.usage);
+      const data = await client().bookmarks();
+      return {
+        data,
+        text:
+          data.map((b) => `#${b.id} ${b.title}\n${b.url}\n${b.note}`).join("\n") ||
+          "待收藏列表为空",
+      };
+    },
+  },
   sources: {
     usage: "sources [list | add <kind> <name> [url] | on <id> | off <id> | rm <id>]",
     summary: "List, add, toggle and remove sources",
@@ -484,9 +529,13 @@ const COMMANDS: Record<string, Command> = {
       if (verb === "add") {
         if (!a || !b)
           throw new Usage(
-            "sources add <rss|atom|hn_front|hn_search|github_releases|web_page> <name> [url]",
+            "sources add <rss|atom|hn_front|hn_search|github_releases|web_page|youtube_channel|github_topic> <name> [url]",
           );
-        const s = await client().addSource({ kind: a as never, name: b, url: c });
+        const s = await client().addSource({
+          kind: a as never,
+          name: b,
+          ...(["github_topic", "hn_search"].includes(a) ? { query: c } : { url: c }),
+        });
         return { data: s, text: print.sourceLine(s) };
       }
       if (verb === "on" || verb === "off") {
@@ -592,14 +641,19 @@ const COMMANDS: Record<string, Command> = {
     },
   },
   doctor: {
-    usage: "doctor",
+    usage: "doctor [--live]",
     summary: "Check Node, keys, the API, scopes, cron, search mode and credits",
     async run() {
-      const checks = await doctor(client(), tokens);
-      if (checks.some((c) => !c.ok)) process.exitCode = 1;
+      const checks = await doctor(client(), tokens, { live: !!flags.live });
+      if (checks.some((c) => !c.ok && c.required !== false)) process.exitCode = 1;
       return {
         data: checks,
-        text: checks.map((c) => `${c.ok ? "pass" : "FAIL"}  ${c.name}: ${c.detail}`).join("\n"),
+        text: checks
+          .map(
+            (c) =>
+              `${c.ok ? "pass" : c.required === false ? "optional" : "FAIL"}  ${c.name}: ${c.detail}`,
+          )
+          .join("\n"),
       };
     },
   },

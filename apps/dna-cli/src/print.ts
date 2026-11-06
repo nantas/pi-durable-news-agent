@@ -1,5 +1,6 @@
 // Plain text views for the dna command. --json skips these and prints the data.
 import {
+  assessmentText,
   ago,
   cleanText,
   k,
@@ -35,7 +36,7 @@ export function cardLine(c: Card): string {
   const timeline = c.timeline
     ? `  timeline ${c.timeline.id} ${c.timeline.index}/${c.timeline.count}`
     : "";
-  return `#${pad(c.id, 4)} ${pad(c.component, 13)} ${cleanText(c.title).slice(0, 90)}\n       ${hfs(c)}${c.attention !== undefined ? `  attention ${c.attention}` : ""}${c.sourceName ? `  ${c.sourceName}` : ""}${timeline}${c.feedback?.signal ? `  you said ${c.feedback.signal}` : ""}`;
+  return `#${pad(c.id, 4)} ${pad(c.component, 13)} ${cleanText(c.title).slice(0, 90)}\n       ${assessmentText(c.assessment)}${c.attention !== undefined ? `  attention ${c.attention}` : ""}${c.sourceName ? `  ${c.sourceName}` : ""}${timeline}${c.feedback?.signal ? `  you said ${c.feedback.signal}` : ""}`;
 }
 
 export function toolLines(t: ToolInfo): string {
@@ -64,6 +65,7 @@ export function cardDetail(d: CardDetail): string {
     cardLine(c),
     c.url ? `  ${c.url}` : "",
     ...props,
+    ...(c.assessment ? [JSON.stringify(c.assessment, null, 2)] : []),
     ...d.findings.map((f) => `  finding: ${cleanText(f.summary)}`),
     d.item
       ? `  relevance ${Math.round((d.item.relevance ?? 0) * 100)}  worth ${Math.round((d.item.worth ?? 0) * 100)}${d.item.matchedTopic ? `  topic ${d.item.matchedTopic}` : ""}`
@@ -94,7 +96,7 @@ export function status(info: Info, agent: AgentState, last?: Sweep): string {
     `${info.deviceName} (${info.device})  ${info.mode}  search ${info.searchMode}  pi-durable ${info.piDurable}`,
     `model ${agent.model}  thinking ${agent.thinkingLevel}  ${agent.busy ? "working" : "idle"}`,
     `context ${k(agent.contextTokens)} of ${k(agent.contextWindow)}  compaction ${k(agent.compaction.background)} and ${k(agent.compaction.force)}${agent.compaction.enabled ? "" : " (off)"}`,
-    `spent ${usd(agent.spend?.totalUsd ?? agent.usage.costUsd)} in total (model ${usd(agent.spend?.modelUsd ?? agent.usage.costUsd)}, jev ${usd(agent.spend?.jevUsd ?? 0)}, images ${usd(agent.spend?.imageUsd ?? 0)}) on ${k(agent.usage.tokens)} tokens`,
+    `recorded cost ${agent.spend?.modelCostUnknown ? "unknown (billing unverified)" : usd(agent.spend?.totalUsd ?? agent.usage.costUsd)} (model ${agent.spend?.modelCostUnknown ? "unknown" : usd(agent.spend?.modelUsd ?? agent.usage.costUsd)}, jev ${usd(agent.spend?.jevUsd ?? 0)}) on ${k(agent.usage.tokens)} tokens`,
     last
       ? `last sweep #${last.id} ${last.status} ${ago(last.endedAt ?? last.createdAt)}: ${last.candidates} candidates, ${last.presented} presented`
       : "no sweeps yet",

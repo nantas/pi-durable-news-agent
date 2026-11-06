@@ -71,6 +71,24 @@ test("model and thinking changes validate against the catalog", async () => {
   assert.deepEqual(deep.quick, quick.quick, "deep research leaves the quick model alone");
 });
 
+test("additional model roles validate independently and survive restart", async () => {
+  await fails(s.client.configure({ coverageModel: "missing/model" }), /Unknown model/);
+  const state = await s.client.configure({
+    researchModel: "faux-haiku",
+    coverageModel: "openai/gpt-6-luna",
+    summaryModel: "faux-haiku",
+  });
+  assert.deepEqual(state.roles, {
+    research: "faux-haiku",
+    coverage: "openai/gpt-6-luna",
+    summary: "faux-haiku",
+  });
+  assert.equal(state.quick.model, "openai/gpt-6-luna");
+  await s.stop();
+  await s.start();
+  assert.deepEqual((await s.client.agent()).roles, state.roles);
+});
+
 test("show me more and less move topic weights, card detail shows the feedback, bad bodies are 400", async () => {
   const started = await s.cron.newsSweep({ requestId: "settings:1" });
   await settledSweep(s.client, started.data.sweep!.id);

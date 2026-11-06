@@ -1,6 +1,6 @@
 // save_source: collect a link for future sweeps. The agent saves a good information source it found, or resolves a
 // lead a reader's upvote left. Discovery finds the site's feed, GitHub releases, or an article listing page.
-import { Type } from "@earendil-works/pi-ai";
+import * as schema from "@earendil-works/pi-schema";
 import { defineAppTool, toolError, toolText } from "@dna/durable-agent";
 import type { Deps } from "../../deps.ts";
 import { discoverSource, isAggregator, watching } from "../../news/sources/discover.ts";
@@ -12,12 +12,12 @@ export function saveSource(deps: Deps) {
       "Text: the saved source (id, name, kind, entries now, url), the source that already covers the site, or the skipped lead.",
     description:
       "Save a site as a source every future sweep fetches. Give lead_id for a lead from SOURCE_LEADS, or the url of a good information source you found (its blog, news page, feed or GitHub repo). It finds the feed itself. With skip true and a lead_id, close a lead that is not a news source.",
-    parameters: Type.Object({
-      url: Type.Optional(Type.String()),
-      lead_id: Type.Optional(Type.Integer()),
-      name: Type.Optional(Type.String({ maxLength: 60 })),
-      reason: Type.String({ minLength: 3, maxLength: 200 }),
-      skip: Type.Optional(Type.Boolean()),
+    parameters: schema.obj({
+      url: schema.opt(schema.str()),
+      lead_id: schema.opt(schema.int()),
+      name: schema.opt(schema.str({ maxLength: 60 })),
+      reason: schema.str({ minLength: 3, maxLength: 200 }),
+      skip: schema.opt(schema.bool()),
     }),
     example: {
       lead_id: 3,

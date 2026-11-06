@@ -29,8 +29,12 @@ export const DEFAULT_DEEP_RESEARCH: DeepResearchSetting = {
   count: 1,
 };
 
-export function deepResearchSetting(store: Store): DeepResearchSetting {
-  return { ...DEFAULT_DEEP_RESEARCH, ...store.settings.get("deepResearch", DEFAULT_DEEP_RESEARCH) };
+export function deepResearchSetting(
+  store: Store,
+  model = DEFAULT_DEEP_RESEARCH.model,
+): DeepResearchSetting {
+  const fallback = { ...DEFAULT_DEEP_RESEARCH, model };
+  return { ...fallback, ...store.settings.get("deepResearch", fallback) };
 }
 
 export function setDeepResearch(

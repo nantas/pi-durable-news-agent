@@ -68,6 +68,7 @@ export class App {
   private detail: Component[] = [];
   private header = new Line("");
   private body = new Container();
+  private scroll = new ScrollView(this.body, { follow: "end", primary: true });
   private transcript = new TranscriptView();
   private status = new Text("", 1, 0);
   private editor = new Editor(this.tui, editorTheme, { paddingX: 1 });
@@ -96,7 +97,7 @@ export class App {
       new VStack([
         { component: this.header, basis: "auto" },
         {
-          component: new ScrollView(this.body, { follow: "end", primary: true }),
+          component: this.scroll,
           basis: 0,
           grow: 1,
           minSize: 3,
@@ -128,6 +129,8 @@ export class App {
         if (frame.type === "hello") void this.loadSnapshot();
         this.agent.apply(frame);
         this.feed.apply(frame);
+        if (frame.type === "sweep" && frame.sweep.status === "completed")
+          void this.client.feed().then((page) => this.feed.load({ cards: page.items }));
         if (
           frame.type === "agent.snapshot" ||
           (frame.type === "agent.batch" &&
@@ -232,12 +235,15 @@ export class App {
 
   /** Show a mode; detail mode shows the given lines under a title. */
   show(mode: Mode, title = "", lines: string[] = []) {
+    const previous = this.mode;
     this.mode = mode;
     if (mode === "detail" || mode === "runs") {
       this.detailTitle = title;
       this.detail = [new TextBlock(lines)];
     }
     this.redraw();
+    if (mode === "feed") this.scroll.scrollTo(0, { disableFollow: true });
+    else if (previous === "feed") this.scroll.scrollToEnd();
   }
 
   private async command(text: string) {
@@ -370,13 +376,35 @@ export class App {
             this.flash(`Keyword ${a} ${verb}`));
           throw new Error("/keyword add|rm|weight|on|off");
         }
+        case "calibrate": {
+          const content = words.slice(1).join(" ").trim();
+          if (!content) throw new Error("/calibrate <card id> <message>");
+          await cl.send({ cardId: id(), content });
+          return this.show("chat");
+        }
+        case "bookmarks": {
+          const [verb, , ...note] = words;
+          if (verb === "add") await cl.addBookmark(id(1), note.join(" "));
+          else if (verb === "note") await cl.updateBookmark(id(1), note.join(" "));
+          else if (verb === "rm") await cl.removeBookmark(id(1));
+          else if (verb && verb !== "list") throw new Error("/bookmarks list|add|note|rm");
+          return this.show(
+            "detail",
+            "待收藏列表",
+            (await cl.bookmarks()).map((b) => `#${b.id} ${b.title} ${b.url} ${b.note}`),
+          );
+        }
         case "sources":
           return this.show("detail", "sources", (await cl.sources()).map(print.sourceLine));
         case "source": {
           const [verb, a, b, u] = words;
           if (verb === "add") {
             if (!a || !b) throw new Error("/source add <kind> <name> [url]");
-            const s = await cl.addSource({ kind: a as never, name: b, url: u });
+            const s = await cl.addSource({
+              kind: a as never,
+              name: b,
+              ...(["github_topic", "hn_search"].includes(a) ? { query: u } : { url: u }),
+            });
             return this.flash(`Added source ${s.name}`);
           }
           if (verb === "toggle") {
@@ -390,6 +418,14 @@ export class App {
           throw new Error("/source add|toggle|rm");
         }
         case "model": {
+          if (["research", "coverage", "summary"].includes(words[0])) {
+            const role = words[0] as "research" | "coverage" | "summary";
+            const state = words[1]
+              ? await cl.configure({ [`${role}Model`]: words[1] })
+              : await cl.agent();
+            this.feed.apply({ type: "agent.state", state });
+            return this.flash(`${role}: ${state.roles?.[role] ?? "unconfigured"}`);
+          }
           if (words[0] === "quick") {
             const state = words[1]
               ? await cl.configure({ quickModel: words[1] })
@@ -405,8 +441,7 @@ export class App {
               "detail",
               "models",
               (this.info?.models ?? []).map(
-                (m) =>
-                  `${m.id === current ? c.accent("●") : " "} ${m.id.padEnd(40)} ${m.name}${m.id === "anthropic/claude-haiku-5.5" ? c.muted("  default") : ""}`,
+                (m) => `${m.id === current ? c.accent("●") : " "} ${m.id.padEnd(40)} ${m.name}`,
               ),
             );
           }
@@ -682,7 +717,7 @@ export class App {
     const usage = sumUsage(s.usage);
     const window = a?.contextWindow ?? 0;
     const pct = window ? Math.round((100 * this.used()) / window) : 0;
-    this.footer.text = ` ${c.muted("model")} ${a?.model ?? ""}  ${c.muted("thinking")} ${a?.thinkingLevel ?? "low"}  ${c.muted("ctx")} ${pct}%  ${a ? contextBar(16, this.used(), window, a.compaction.background, a.compaction.force) : ""}  ${usd(usage.cost)}  ${c.faint("/help")}`;
+    this.footer.text = ` ${c.muted("model")} ${a?.model ?? ""}  ${c.muted("thinking")} ${a?.thinkingLevel ?? "low"}  ${c.muted("ctx")} ${pct}%  ${a ? contextBar(16, this.used(), window, a.compaction.background, a.compaction.force) : ""}  ${a?.spend?.modelCostUnknown ? "cost unknown" : usd(usage.cost)}  ${c.faint("/help")}`;
     this.tui.requestRender();
   }
 }

@@ -34,6 +34,7 @@ function run(script, args, env, cwd) {
     env: {
       ...process.env,
       NODE_NO_WARNINGS: "1",
+      DNA_WIKI_DIR: "",
       DNA_ENV_FILE: "none",
       DNA_LOG_DIR: join(tmp, "logs"),
       ...env,
@@ -71,6 +72,13 @@ const api = run(
   ["--port", String(apiPort)],
   {
     DNA_PROVIDER: "faux",
+    JEV_BACKEND: "fixture",
+    DNA_MODEL: "faux-haiku",
+    DNA_RESEARCH_MODEL: "faux-haiku",
+    DNA_QUICK_MODEL: "anthropic/claude-haiku-5.5",
+    DNA_COVERAGE_MODEL: "faux-haiku",
+    DNA_DEEP_RESEARCH_MODEL: "anthropic/claude-haiku-5.5",
+    DNA_SUMMARY_MODEL: "faux-haiku",
     DNA_SEARCH_MODE: "fixture",
     DNA_FIXTURE_SET: "news",
     DNA_DATA_DIR: join(tmp, "data"),
@@ -122,6 +130,44 @@ fixtureDb
   .run(storyId, related[1].itemId);
 fixtureDb.prepare("INSERT INTO story_items VALUES (?, ?)").run(storyId, related[1].itemId);
 fixtureDb.exec("COMMIT");
+const visibleCards = (await call("GET", "/v1/feed")).items;
+for (const [index, card] of visibleCards.entries()) {
+  const assessment = {
+    itemId: card.itemId,
+    command: "incremental",
+    version: 1,
+    materialHash: "fixture-material",
+    coverageSnapshot: "fixture-coverage",
+    status: index === 0 ? "completed" : index === 1 ? "unknown" : "pending",
+    scores: index === 0 ? { design: 85, tools: 20, reference: 40 } : undefined,
+    confidence: index === 0 ? 0.3 : undefined,
+    reason: "Fixture evidence limit",
+    readingDepth: "excerpt",
+    claims: [{ id: "c1", text: "Fixture design claim" }],
+    evidence: [
+      {
+        id: "e1",
+        path: "wiki/design.md",
+        layer: "wiki",
+        excerpt: "Fixture coverage evidence",
+        contentHash: "fixture-evidence",
+      },
+    ],
+    queries: [{ claimId: "c1", queries: ["design"], scopes: ["wiki"] }],
+  };
+  const row = fixtureDb
+    .prepare(`INSERT INTO assessments (item_id, command, version, material_hash, coverage_snapshot, payload_json)
+    VALUES (?, ?, ?, ?, ?, ?) RETURNING id`)
+    .get(
+      card.itemId,
+      assessment.command,
+      1,
+      assessment.materialHash,
+      assessment.coverageSnapshot,
+      JSON.stringify(assessment),
+    );
+  fixtureDb.prepare("UPDATE items SET current_assessment_id=? WHERE id=?").run(row.id, card.itemId);
+}
 fixtureDb.close();
 
 const browser = await chromium.launch({ channel: "chrome", headless: !process.env.HEADED });
@@ -200,27 +246,16 @@ try {
   );
   const boxes = await news.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().top));
   check(
-    ids.every((id, i) => i === 0 || id > ids[i - 1]) &&
+    ids.join() === (await call("GET", "/v1/feed")).items.map((card) => card.id).join() &&
       boxes.every((y, i) => i === 0 || y > boxes[i - 1]),
-    "news runs in arrival order, the newest card last and lowest",
+    "News preserves the server ranking with high incremental value first",
   );
-  const ranked = await page.locator('[data-testid="hfs"]').evaluateAll((els) =>
-    els.map((el) =>
-      [...el.querySelectorAll(".hfs-chip")].map((c) => ({
-        score: Number(c.getAttribute("data-score")),
-        primary: c.classList.contains("primary"),
-      })),
-    ),
-  );
+  const assessmentLabels = await page.locator('[data-testid="assessment"]').allTextContents();
   check(
-    ranked.length === 3 &&
-      ranked.every(
-        (chips) =>
-          chips.length === 3 &&
-          chips[0].primary &&
-          chips.every((c, i) => i === 0 || c.score <= chips[i - 1].score),
-      ),
-    "H/F/S pills are ranked with the primary first",
+    assessmentLabels.some((text) => text.includes("游戏设计方法 85") && text.includes("30%")) &&
+      assessmentLabels.some((text) => text.includes("覆盖依据不足")) &&
+      assessmentLabels.some((text) => text === "待评估"),
+    "cards show completed low confidence, unknown and pending assessments",
   );
   const comps = await page
     .locator(".card")
@@ -297,27 +332,33 @@ try {
 
   // ---------------------------------------------------------------- card polish
   const firstCard = page.locator(".feed-list .card").first();
-  const chipFill = await firstCard.locator(".hfs-chip").evaluateAll((els) =>
-    els.map((e) => ({
-      score: e.getAttribute("data-score"),
-      style: e.getAttribute("style") ?? "",
-    })),
+  await firstCard.getByRole("button", { name: "收藏线索", exact: true }).click();
+  await page.getByRole("button", { name: "待收藏列表", exact: true }).click();
+  const bookmarksDialog = page.getByRole("dialog", { name: "待收藏列表", exact: true });
+  await bookmarksDialog.locator("article").waitFor();
+  check((await bookmarksDialog.locator("a").count()) === 1, "saved lead appears in Bookmark list");
+  await bookmarksDialog.locator("input").fill("Fixture note");
+  await bookmarksDialog.getByRole("button", { name: "保存备注" }).click();
+  for (let i = 0; i < 50 && (await call("GET", "/v1/bookmarks"))[0]?.note !== "Fixture note"; i++)
+    await sleep(50);
+  check((await call("GET", "/v1/bookmarks"))[0]?.note === "Fixture note", "Bookmark note persists");
+  await bookmarksDialog.getByRole("button", { name: "取消收藏" }).click();
+  await bookmarksDialog.getByText("待收藏列表为空").waitFor();
+  await bookmarksDialog.getByRole("button", { name: "关闭待收藏列表" }).click();
+  await firstCard.getByRole("button", { name: "评分不准", exact: true }).click();
+  await page.getByLabel("Message the agent").fill("这个评分不准，请解释依据");
+  const calibrationRequest = page.waitForRequest(
+    (request) => request.url().endsWith("/api/v1/agent/messages") && request.method() === "POST",
   );
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  const calibrationBody = (await calibrationRequest).postDataJSON();
   check(
-    chipFill.length === 3 && chipFill.every((c) => c.style.includes(`--fill: ${c.score}%`)),
-    "each H/F/S chip fills to its score",
+    calibrationBody.cardId === Number(await firstCard.getAttribute("data-card-id")) &&
+      calibrationBody.content === "这个评分不准，请解释依据",
+    "scoring feedback sends card context and the user's original words",
   );
-  const order = await page.locator(".feed-list .card").evaluateAll((cards) =>
-    cards.map((card) => ({
-      chips: [...card.querySelectorAll(".hfs-chip")].map((c) => c.getAttribute("data-category")),
-      labels: [...card.querySelectorAll(".fb.tag")].map((b) =>
-        ["hype", "facts", "signal"].find((c) => b.classList.contains(c)),
-      ),
-    })),
-  );
-  check(
-    order.every((o) => o.chips.join() === o.labels.join()),
-    "label buttons follow each card's ranked chip order",
+  await page.waitForFunction(
+    () => document.querySelector('[aria-label="Message the agent"]').value === "",
   );
   await firstCard.getByRole("button", { name: "Reference in chat" }).click();
   const draftText = await page.getByLabel("Message the agent").inputValue();
