@@ -14,6 +14,11 @@ default:
 dev:
     trap 'kill 0' EXIT; just api faux & sleep 3; just browser dev local
 
+# Live API plus hub with hot reload; Ctrl-C stops both
+[no-cd]
+live:
+    trap 'kill 0' EXIT; just api dev & sleep 3; just browser dev local
+
 # This Mac, always on: API and UI in the background, plus the crontab tick
 [no-cd]
 local:
