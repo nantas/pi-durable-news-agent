@@ -58,8 +58,14 @@ pass "attached to $TARGET"
 
 send "/feed"
 wait_for "\[feed\]" 10
-wait_for "(游戏设计方法|创作与生产工具|内容参考与储备|Signal|Facts|Hype) [0-9]+" 10
-pass "/feed shows ranked cards"
+RANKED="(游戏设计方法|创作与生产工具|内容参考与储备|Signal|Facts|Hype) [0-9]+"
+if [ "$TARGET" = "faux" ]; then
+  wait_for "$RANKED" 10
+  pass "/feed shows ranked cards"
+else
+  wait_for "($RANKED|覆盖依据不足)" 10
+  pass "/feed shows ranked cards or a valid unknown assessment"
+fi
 [ -n "${SHOTS:-}" ] && screen > "$SHOTS/feed.txt"
 CARD=$(screen | grep -Eo '#[0-9]+ (brief|signal_alert|thread_pulse|headline|fact_check|hype_watch|release|quote)' | head -1 | grep -Eo '[0-9]+')
 

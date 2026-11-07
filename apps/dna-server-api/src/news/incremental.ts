@@ -257,8 +257,12 @@ export async function assessIncremental(
         confidence: judgment.confidence,
         probabilities: judgment.probabilities,
       };
-      if (judgment.choice === "unknown") throw new Error("Coverage evidence is insufficient");
     }
+    const unknownClaims = Object.entries(input.judgments)
+      .filter(([, judgment]) => judgment.choice === "unknown")
+      .map(([key]) => input.claims[Number(key.split("_")[1])]?.id ?? key);
+    if (unknownClaims.length > 0)
+      throw new Error(`Coverage unknown for ${unknownClaims.join(", ")}`);
     const result = await judge("incremental", {
       ...vars,
       coverage: { ...vars.coverage, judgments: input.judgments },
@@ -308,7 +312,7 @@ export async function assessIncremental(
     input.status = "completed";
   } catch (error) {
     input.status = "unknown";
-    input.reason = String(error);
+    input.reason = error instanceof Error ? error.message : String(error);
     delete input.scores;
   } finally {
     if (!options.search) search?.close();

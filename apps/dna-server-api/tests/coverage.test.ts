@@ -7,6 +7,7 @@ import { test } from "node:test";
 import { coverageSnapshot, lookupMaterial, readCoverageEvidence } from "../src/news/coverage.ts";
 import { assessIncremental, parseEvidenceJson } from "../src/news/incremental.ts";
 import { fauxApp } from "./helpers.ts";
+import type { Judge } from "../src/news/hfs.ts";
 
 function wiki() {
   const dir = mkdtempSync(join(tmpdir(), "dna-coverage-"));
@@ -109,6 +110,111 @@ test("fixed evidence is judged, memoized and published; failed search is unknown
     assert.equal(failed.scores, undefined);
     assert.ok(failed.queries.every((q) => q.error));
     assert.equal(app.store.news.cardForItem(item.id)?.assessment?.id, failed.id);
+  } finally {
+    await cleanup();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+function coverageChoices(judge: Judge, choices: string[], onIncremental?: () => void) {
+  const run = judge.run.bind(judge);
+  judge.run = async (name, vars, ref) => {
+    if (name === "incremental") onIncremental?.();
+    const result = await run(name, vars, ref);
+    if (name === "coverage")
+      for (const [index, choice] of choices.entries()) {
+        const answer = result.answers[`coverage_${index}`];
+        if (answer.type !== "choice") throw new Error("Expected coverage choice");
+        answer.choice = choice;
+        answer.probabilities = Object.fromEntries(
+          Object.keys(answer.probabilities).map((key) => [key, key === choice ? 1 : 0]),
+        );
+      }
+    return result;
+  };
+}
+
+test("unknown coverage retains every claim judgment and skips incremental scoring", async () => {
+  const dir = wiki();
+  const { app, cleanup } = await fauxApp({ DNA_WIKI_DIR: dir });
+  try {
+    const { item } = app.store.news.upsertItem({
+      url: "https://example.com/multi-claim-unknown",
+      title: "Several claims",
+      excerpt: "Material with several claims",
+    });
+    app.store.news.addCard({
+      kind: "news",
+      component: "headline",
+      props: {},
+      itemId: item.id,
+      toolCallId: "coverage-multi-unknown",
+    });
+    let incrementalCalls = 0;
+    coverageChoices(app.judge, ["unknown", "not_covered", "unknown"], () => {
+      incrementalCalls++;
+    });
+    const result = await assessIncremental(app, item.id, {
+      plan: async () => [
+        { text: "First", queries: ["first"] },
+        { text: "Second", queries: ["second"] },
+        { text: "Third", queries: ["third"] },
+      ],
+      search: {
+        async search() {
+          return { hits: [{ path: "10-wiki/design.md" }], mode: "fixture" };
+        },
+        close() {},
+      },
+      select: async () => ["10-wiki/design.md"],
+    });
+    assert.equal(result.status, "unknown");
+    assert.equal(result.reason, "Coverage unknown for claim-1, claim-3");
+    assert.deepEqual(Object.keys(result.judgments ?? {}), [
+      "coverage_0",
+      "coverage_1",
+      "coverage_2",
+    ]);
+    assert.equal(result.judgments?.coverage_1?.choice, "not_covered");
+    assert.equal(result.scores, undefined);
+    assert.equal(incrementalCalls, 0);
+  } finally {
+    await cleanup();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test("not covered and partially covered claims continue to incremental scoring", async () => {
+  const dir = wiki();
+  const { app, cleanup } = await fauxApp({ DNA_WIKI_DIR: dir });
+  try {
+    const { item } = app.store.news.upsertItem({
+      url: "https://example.com/mixed-coverage",
+      title: "Mixed coverage",
+      excerpt: "Material with mixed coverage",
+    });
+    let incrementalCalls = 0;
+    coverageChoices(app.judge, ["not_covered", "partial"], () => {
+      incrementalCalls++;
+    });
+    const result = await assessIncremental(app, item.id, {
+      plan: async () => [
+        { text: "First", queries: ["first"] },
+        { text: "Second", queries: ["second"] },
+      ],
+      search: {
+        async search() {
+          return { hits: [{ path: "10-wiki/design.md" }], mode: "fixture" };
+        },
+        close() {},
+      },
+      select: async () => ["10-wiki/design.md"],
+    });
+    assert.equal(result.status, "completed", result.reason);
+    assert.ok(result.scores);
+    assert.equal(incrementalCalls, 1);
+    assert.equal(result.judgments?.coverage_0?.choice, "not_covered");
+    assert.equal(result.judgments?.coverage_1?.choice, "partial");
   } finally {
     await cleanup();
     rmSync(dir, { recursive: true, force: true });
